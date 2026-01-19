@@ -880,6 +880,8 @@ fillCategorySelect(rosterCategory);
 ====================== */
 let unsubState = null;
 let currentState = null;
+let unsubAdminPerf = null;
+let lastAutoPerfKey = null;
 
 let unsubPerf = null;
 let lastPerfDoc = null;
@@ -888,11 +890,68 @@ function listenState(){
   if (unsubState) unsubState();
   unsubState = stateRef(sessione.value).onSnapshot((snap) => {
     currentState = snap.exists ? snap.data() : null;
+    if (isAdmin() && isAdminUnlocked()){
+  listenAdminAutoAdvance();
+}
+
     refreshFromState();
   });
 }
 
 function listenPerformanceForJudges(){
+  function listenAdminAutoAdvance(){
+  // Chiude listener precedente
+  if (unsubAdminPerf){
+    unsubAdminPerf();
+    unsubAdminPerf = null;
+  }
+
+  // Solo Admin sbloccato
+  if (!isAdmin() || !isAdminUnlocked()) return;
+
+  // Stato valido
+  if (!currentState || currentState.active !== true) return;
+  if (currentState.categoryActive !== true) return;
+  if (currentState.locked === true) return;
+
+  const cat = currentState.categoryName;
+  const st = currentState.start;
+  if (!cat || !st) return;
+
+  const ref = perfRef(sessione.value, cat, st);
+
+  unsubAdminPerf = ref.onSnapshot(async (snap) => {
+    const d = snap.exists ? snap.data() : null;
+    const j = d?.judges || {};
+
+    const ok1 = j.j1?.submitted === true;
+    const ok2 = j.j2?.submitted === true;
+    const ok3 = j.j3?.submitted === true;
+
+    // Se non hanno votato tutti, fermati
+    if (!(ok1 && ok2 && ok3)) return;
+
+    const perfKey = `${sessione.value}__${cat}__${st}`;
+    if (lastAutoPerfKey === perfKey) return;
+    lastAutoPerfKey = perfKey;
+
+    // Piccola pausa di sicurezza
+    setTimeout(async () => {
+      const stSnap = await stateRef(sessione.value).get();
+      const sdata = stSnap.exists ? stSnap.data() : null;
+
+      if (!sdata) return;
+      if (sdata.locked === true) return;
+      if (sdata.categoryActive !== true) return;
+      if (sdata.categoryName !== cat) return;
+      if (String(sdata.start) !== String(st)) return;
+
+      // 👉 AVANZA AUTOMATICAMENTE
+      await adminStepAthlete(+1);
+    }, 600);
+  });
+}
+
   if (unsubPerf){ unsubPerf(); unsubPerf = null; }
   lastPerfDoc = null;
 

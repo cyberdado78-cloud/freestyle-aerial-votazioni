@@ -484,6 +484,41 @@
           </div>
 
           <div class="divider"></div>
+          <div class="divider"></div>
+<h2 style="margin-top:0">Andamento live categoria</h2>
+
+<div class="card" style="padding:10px;">
+  <div class="row" style="align-items:center; justify-content:space-between;">
+    <div class="hint">
+      <b>Categoria attiva:</b> <span id="adminLiveCat">—</span>
+      • <b>Atleta corrente:</b> <span id="adminLiveNow">—</span>
+    </div>
+    <span class="badge accent" id="adminLiveCount">—</span>
+  </div>
+
+  <div style="margin-top:10px; overflow:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Start</th>
+          <th>Atleta</th>
+          <th class="num">Voti</th>
+          <th class="num">J1</th>
+          <th class="num">J2</th>
+          <th class="num">J3</th>
+          <th class="num">Finale (media)</th>
+          <th class="num">Posizione</th>
+        </tr>
+      </thead>
+      <tbody id="adminLiveBody"></tbody>
+    </table>
+  </div>
+
+  <div class="hint" style="margin-top:8px;">
+    La tabella si aggiorna in tempo reale. La posizione appare quando ci sono risultati completi.
+  </div>
+</div>
+
           <h2 style="margin-top:0">Gestione roster atleti</h2>
 
           <div class="row">
@@ -615,6 +650,49 @@ const clamp = (x,min,max) => Number.isNaN(x) ? min : Math.max(min, Math.min(max,
 const fmt1 = (x) => (Math.round(x*10)/10).toFixed(1);
 const sum = (a) => a.reduce((p,c)=>p+c,0);
 const safeId = (s) => String(s||"").trim().replaceAll(" ", "_");
+// ======= CALCOLI PUNTEGGI =======
+function calcJudgeTotal(scores, penalty){
+  const s = Array.isArray(scores) ? scores.map(x=>Number(x)||0) : [];
+  const p = Number(penalty)||0;
+  return sum(s) - p;
+}
+
+function getPerfFinal(perf){
+  const j = perf?.judges || {};
+  const j1 = j.j1, j2 = j.j2, j3 = j.j3;
+
+  const ok1 = j1?.submitted === true;
+  const ok2 = j2?.submitted === true;
+  const ok3 = j3?.submitted === true;
+
+  const t1 = ok1 ? calcJudgeTotal(j1.scores, j1.penalty) : null;
+  const t2 = ok2 ? calcJudgeTotal(j2.scores, j2.penalty) : null;
+  const t3 = ok3 ? calcJudgeTotal(j3.scores, j3.penalty) : null;
+
+  const all = (ok1 && ok2 && ok3);
+  const finalAvg = all ? (t1 + t2 + t3) / 3 : null;
+
+  const votedCount = (ok1?1:0) + (ok2?1:0) + (ok3?1:0);
+
+  return { ok1, ok2, ok3, votedCount, t1, t2, t3, all, finalAvg };
+}
+
+// ======= ID RISULTATI =======
+function resultKey(session, category){
+  return safeId(`${session}__${category}`);
+}
+function resultItemId(session, category, startNum){
+  return safeId(`${session}__${category}__${startNum}`);
+}
+function resultItemRef(session, category, startNum){
+  return db.collection("results")
+    .doc(resultKey(session, category))
+    .collection("items")
+    .doc(resultItemId(session, category, startNum));
+}
+function standingsRef(session, category){
+  return db.collection("standings").doc(resultKey(session, category));
+}
 
 function getUrlRole(){
   const p = new URLSearchParams(location.search);
@@ -733,6 +811,134 @@ const btnRosterLoad = document.getElementById("btnRosterLoad");
 const btnRosterSave = document.getElementById("btnRosterSave");
 const btnRosterClear = document.getElementById("btnRosterClear");
 const rosterInfo = document.getElementById("rosterInfo");
+// ======= ADMIN LIVE UI =======
+const adminLiveCat = document.getElementById("adminLiveCat");
+const adminLiveNow = document.getElementById("adminLiveNow");
+const adminLiveCount = document.getElementById("adminLiveCount");
+const adminLiveBody = document.getElementById("adminLiveBody");
+
+let unsubAdminLive = null;
+let lastStandingsWriteKey = null;
+
+function clearAdminLive(){
+  if (adminLiveCat) adminLiveCat.textContent = "—";
+  if (adminLiveNow) adminLiveNow.textContent = "—";
+  if (adminLiveCount) adminLiveCount.textContent = "—";
+  if (adminLiveBody) adminLiveBody.innerHTML = "";
+}
+
+async function computeAndWriteStandings(session, category){
+  // legge tutti i risultati completi e scrive la classifica con posizioni
+  const snap = await db.collection("results")
+    .doc(resultKey(session, category))
+    .collection("items")
+    .get();
+
+  const items = [];
+  snap.forEach(doc => {
+    const d = doc.data() || {};
+    if (typeof d.finalAvg === "number") items.push(d);
+  });
+
+  items.sort((a,b) => (b.finalAvg - a.finalAvg));
+
+  // assegna posizione
+  const ranked = items.map((x,i) => ({
+    ...x,
+    position: i + 1
+  }));
+
+  await standingsRef(session, category).set({
+    session,
+    category,
+    updatedAt: Date.now(),
+    items: ranked
+  }, { merge:true });
+}
+
+function renderAdminLiveTable(perfDocs, standingsMap){
+  // perfDocs: array {startNum, atleta, votedCount, t1,t2,t3, finalAvg}
+  // standingsMap: startNum -> position
+  const rows = perfDocs.sort((a,b)=>a.startNum-b.startNum).map(p => {
+    const pos = standingsMap?.[p.startNum] || "—";
+    const finalTxt = (typeof p.finalAvg === "number") ? fmt1(p.finalAvg) : "—";
+    const j1 = (typeof p.t1 === "number") ? fmt1(p.t1) : "—";
+    const j2 = (typeof p.t2 === "number") ? fmt1(p.t2) : "—";
+    const j3 = (typeof p.t3 === "number") ? fmt1(p.t3) : "—";
+    const votes = `${p.votedCount}/3`;
+
+    return `
+      <tr>
+        <td>${p.startNum}</td>
+        <td>${(p.atleta||"—")}</td>
+        <td class="num">${votes}</td>
+        <td class="num">${j1}</td>
+        <td class="num">${j2}</td>
+        <td class="num">${j3}</td>
+        <td class="num"><b>${finalTxt}</b></td>
+        <td class="num">${pos}</td>
+      </tr>
+    `;
+  }).join("");
+
+  adminLiveBody.innerHTML = rows || `<tr><td colspan="8" class="hint">Nessun dato.</td></tr>`;
+}
+
+async function loadStandingsMap(session, category){
+  const snap = await standingsRef(session, category).get();
+  if (!snap.exists) return {};
+  const d = snap.data() || {};
+  const items = Array.isArray(d.items) ? d.items : [];
+  const map = {};
+  items.forEach(it => {
+    const st = parseInt(it.start,10);
+    if (!Number.isNaN(st)) map[st] = it.position;
+  });
+  return map;
+}
+
+function listenAdminLive(){
+  if (unsubAdminLive){ unsubAdminLive(); unsubAdminLive = null; }
+  clearAdminLive();
+
+  if (!isAdmin() || !isAdminUnlocked()) return;
+  if (!currentState || currentState.active !== true || currentState.categoryActive !== true) return;
+
+  const sess = sessione.value;
+  const cat = currentState.categoryName;
+
+  adminLiveCat.textContent = cat || "—";
+  adminLiveNow.textContent = `Start ${currentState.start || "—"} • ${currentState.athleteName || "—"}`;
+
+  // Query live delle performances della categoria
+  const q = db.collection("performances")
+    .where("sessione", "==", sess)
+    .where("categoria", "==", cat);
+
+  unsubAdminLive = q.onSnapshot(async (qs) => {
+    const perfDocs = [];
+    qs.forEach(doc => {
+      const d = doc.data() || {};
+      const startNum = parseInt(d.start, 10);
+      if (Number.isNaN(startNum)) return;
+
+      const f = getPerfFinal(d);
+
+      perfDocs.push({
+        startNum,
+        atleta: d.atleta || "",
+        votedCount: f.votedCount,
+        t1: f.t1, t2: f.t2, t3: f.t3,
+        finalAvg: f.finalAvg
+      });
+    });
+
+    adminLiveCount.textContent = `${perfDocs.length} performance`;
+
+    const standingsMap = await loadStandingsMap(sess, cat);
+    renderAdminLiveTable(perfDocs, standingsMap);
+  });
+}
 
 // Public
 const pubAthlete = document.getElementById("pubAthlete");
@@ -891,6 +1097,10 @@ function listenState(){
   unsubState = stateRef(sessione.value).onSnapshot((snap) => {
     currentState = snap.exists ? snap.data() : null;
     if (isAdmin() && isAdminUnlocked()){
+  listenAdminLive();
+}
+
+    if (isAdmin() && isAdminUnlocked()){
   listenAdminAutoAdvance();
 }
 
@@ -947,7 +1157,35 @@ function listenPerformanceForJudges(){
       if (String(sdata.start) !== String(st)) return;
 
       // 👉 AVANZA AUTOMATICAMENTE
-      await adminStepAthlete(+1);
+      // 1) calcola il finale
+const f = getPerfFinal(d);
+if (f.all && typeof f.finalAvg === "number"){
+
+  // 2) salva storico atleta (results)
+  await resultItemRef(sessione.value, cat, st).set({
+    session: sessione.value,
+    category: cat,
+    start: String(st),
+    athlete: d?.atleta || currentState?.athleteName || "",
+    j1: (typeof f.t1 === "number") ? f.t1 : null,
+    j2: (typeof f.t2 === "number") ? f.t2 : null,
+    j3: (typeof f.t3 === "number") ? f.t3 : null,
+    finalAvg: f.finalAvg,
+    completedAt: Date.now()
+  }, { merge:true });
+
+  // 3) aggiorna classifica categoria (standings)
+  // evita scritture ripetute ravvicinate
+  const wKey = `${sessione.value}__${cat}`;
+  if (lastStandingsWriteKey !== wKey){
+    lastStandingsWriteKey = wKey;
+  }
+  await computeAndWriteStandings(sessione.value, cat);
+}
+
+// 👉 AVANZA AUTOMATICAMENTE
+await adminStepAthlete(+1);
+
     }, 600);
   });
 }

@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Votazioni Live – Freestyle Aerial Competition</title>
+
+  <!-- Firebase COMPAT (stabile su mobile) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* ======================
+       BRAND COLORS (BIANCO/ROSSO/ORO/NERO)
+    ======================= */
+    :root{
+      /* BRAND */
+      --brand-black: #0b0b0b;
+      --brand-white: #ffffff;
+      --brand-red:   #c1121f;
+      --brand-gold:  #d4af37;
+
+      /* BACKGROUND */
+      --bg: #ffffff;
+      --card: #ffffff;
+
+      /* TEXT */
+      --text: #0b0b0b;
+      --muted: #6b6b6b;
+
+      /* LINES / DIVIDERS */
+      --line: #e6e6e6;
+
+      /* ACTIONS */
+      --accent: var(--brand-red);
+      --accent-2: var(--brand-gold);
+
+      /* FEEDBACK */
+      --okbg: #f6fff9;
+      --ok: #1b5e20;
+
+      --badbg: #fff1f1;
+      --bad: #8b0000;
+
+      --warnbg: #fff8e1;
+      --warn: #8a6d1d;
+
+      /* UI */
+      --radius: 16px;
+      --shadow: 0 12px 30px rgba(0,0,0,.08);
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:14px;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      line-height:1.35;
+    }
+    a{ color:var(--accent); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    /* Top bar */
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      margin-bottom:12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+    }
+    .brand img{
+      height:44px; width:auto; display:block;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.12));
+    }
+    .brandTitle{ display:flex; flex-direction:column; }
+    .brandTitle b{ letter-spacing:.2px; }
+    .brandTitle span{ color:var(--muted); font-size:12px; margin-top:2px; }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:14px;
+      margin:12px 0;
+      box-shadow:var(--shadow);
+    }
+
+    h2{
+      font-size:16px;
+      margin:0 0 10px;
+      font-weight: 800;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+    .col{ min-width:220px; flex:1; }
+
+    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+    input,select,textarea{
+      width:100%;
+      padding:11px 12px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      color:var(--text);
+      outline:none;
+    }
+    input:focus,select:focus,textarea:focus{
+      border-color:rgba(193,18,31,.35);
+      box-shadow:0 0 0 4px rgba(193,18,31,.12);
+    }
+    input[disabled],select[disabled],textarea[disabled]{
+      opacity:.6; background:#fafafa; cursor:not-allowed;
+    }
+    input[type="number"]{ width:140px; text-align:center; font-variant-numeric:tabular-nums; font-size:18px; font-weight:800; }
+    textarea{ min-height:110px; resize:vertical; }
+
+    button{
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      color:var(--text);
+      cursor:pointer;
+      white-space:nowrap;
+    }
+
+    button.primary{
+      background: linear-gradient(135deg, var(--brand-red), #a50f1a);
+      border-color: rgba(193,18,31,.25);
+      color:#fff;
+      box-shadow: 0 8px 18px rgba(193,18,31,.35);
+    }
+    button.primary:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(193,18,31,.45);
+    }
+    button:hover{ background:#fafafa; }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .hint{ font-size:12px; color:var(--muted); }
+    .hide{ display:none !important; }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      border:1px solid transparent;
+    }
+    .badge.ok{ background:var(--okbg); color:var(--ok); border-color:rgba(27,94,32,.18); }
+    .badge.bad{ background:var(--badbg); color:var(--bad); border-color:rgba(139,0,0,.18); }
+    .badge.warn{ background:var(--warnbg); color:var(--warn); border-color:rgba(138,109,29,.18); }
+
+    /* Gold premium badge */
+    .badge.accent{
+      background: linear-gradient(135deg, var(--brand-gold), #b8962e);
+      color:#1a1a1a;
+      font-weight:700;
+      border-color: rgba(212,175,55,.18);
+      box-shadow: 0 4px 10px rgba(212,175,55,.35);
+    }
+
+    .msg{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-size:12px;
+    }
+    .msg.ok{ background:var(--okbg); border-color:rgba(27,94,32,.20); color:var(--ok); }
+    .msg.bad{ background:var(--badbg); border-color:rgba(139,0,0,.20); color:var(--bad); }
+    .msg.warn{ background:var(--warnbg); border-color:rgba(138,109,29,.20); color:var(--warn); }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:#fff;
+    }
+    th,td{ border-bottom:1px solid var(--line); padding:10px 10px; vertical-align:middle; }
+    th{ text-align:left; font-size:12px; color:var(--muted); background:#fbfbfd; }
+    .num{ text-align:right; white-space:nowrap; }
+
+    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media(max-width:980px){ .grid2{ grid-template-columns:1fr; } body{ margin:10px; } }
+
+    .judgeFooter{
+      position:sticky;
+      bottom:0;
+      margin-top:12px;
+      padding-top:10px;
+      background:linear-gradient(to top, var(--card) 70%, rgba(255,255,255,0));
+    }
+
+    /* Total badge premium */
+    .judgeFooter .badge.ok{
+      background: linear-gradient(135deg, #ffffff, #fff8e1);
+      color: var(--brand-black);
+      font-size: 14px;
+      border: 1px solid var(--brand-gold);
+    }
+    #tot{
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--brand-black);
+    }
+
+    /* Athlete emphasis */
+    #athRO{
+      font-weight: 800;
+      letter-spacing: .3px;
+    }
+
+    /* Public */
+    .publicWrap{ max-width:560px; margin:0 auto; }
+    .center{ text-align:center; }
+    .bigScore{
+      font-size:44px;
+      font-weight:900;
+      letter-spacing:.5px;
+      color: var(--brand-red);
+      text-shadow: 0 2px 8px rgba(193,18,31,.35);
+    }
+    .range{ width:100%; }
+
+    .videoBox{
+      border:2px solid var(--brand-gold);
+      border-radius:14px;
+      overflow:hidden;
+      background:#000;
+      aspect-ratio: 16 / 9;
+      width:100%;
+      margin-top:10px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.25);
+    }
+    .videoBox iframe{ width:100%; height:100%; border:0; display:block; }
+    .divider{ height:1px; background:var(--line); margin:12px 0; }
+
+    /* Smooth micro transitions */
+    button, .badge, .card{ transition: all .18s ease; }
+
+    /* =========================
+       DARK STAGE MODE (local to device)
+    ========================= */
+    body.dark{
+      --bg: #0b0b0b;
+      --card: #111111;
+
+      --text: #ffffff;
+      --muted: #b5b5b5;
+
+      --line: #2a2a2a;
+
+      --okbg: #0f2e1a;
+      --ok: #7ddc9a;
+
+      --badbg: #3a0d0d;
+      --bad: #ff6b6b;
+
+      --warnbg: #3a2e0d;
+      --warn: #ffd166;
+
+      --shadow: 0 16px 40px rgba(0,0,0,.6);
+    }
+    body.dark input,
+    body.dark textarea,
+    body.dark select{
+      background:#0f0f0f;
+      color:#ffffff;
+      border-color:#2a2a2a;
+    }
+    body.dark table{ background:#0f0f0f; }
+    body.dark th{ background:#141414; }
+    body.dark .judgeFooter{
+      background:linear-gradient(to top, var(--card) 70%, rgba(17,17,17,0));
+    }
+    body.dark .judgeFooter .badge.ok{
+      background: linear-gradient(135deg, #111111, #3a2e0d);
+      color: #ffffff;
+      border-color: var(--brand-gold);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="brand">
+      <img id="brandLogo" alt="Logo" />
+      <div class="brandTitle">
+        <b id="brandName">Freestyle Aerial Competition</b>
+        <span id="brandSubtitle">Votazioni Live • Giudici + Pubblico</span>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:center; justify-content:flex-end; gap:10px">
+      <button id="toggleTheme" class="badge accent" style="border:0; cursor:pointer">🌙 Dark Stage</button>
+      <span class="badge accent" id="envBadge">Online</span>
+    </div>
+  </div>
+
+  <!-- ======================
+       APP MAIN (Admin / Judges)
+  ======================= -->
+  <div id="appMain">
+
+    <div class="card">
+      <div class="row">
+        <div class="col" style="min-width:240px; flex:0 0 auto;">
+          <label>Ruolo</label>
+          <select id="ruolo">
+            <option value="ADMIN">Admin</option>
+            <option value="J1">Giudice 1</option>
+            <option value="J2">Giudice 2</option>
+            <option value="J3">Giudice 3</option>
+            <option value="PUBLIC">Pubblico</option>
+          </select>
+          <div class="hint" id="roleLockHint"></div>
+        </div>
+
+        <div class="col" style="min-width:280px; flex:0 0 auto;">
+          <label>Giornata / Sessione</label>
+          <select id="sessione">
+            <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
+            <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
+          </select>
+          <div class="hint">L’Admin decide quale giornata avviare. L’altra resta spenta.</div>
+        </div>
+
+        <div class="col">
+          <label>Stato gara</label>
+          <div class="row" style="align-items:center">
+            <span class="badge warn" id="stateBadge">In attesa</span>
+            <span class="hint" id="stateLine">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+
+      <!-- JUDGE PANEL -->
+      <div class="card" id="judgePanel">
+        <h2>Schermata Giudice</h2>
+
+        <div class="row" style="justify-content:space-between; align-items:center">
+          <div class="hint"><b>Giudice:</b> <span id="who">—</span></div>
+          <div class="row" style="gap:8px; align-items:center">
+            <span id="freezeBadge" class="badge warn hide">BLOCCO VOTAZIONI</span>
+            <span id="submittedBadge" class="badge ok hide">INVIATO</span>
+          </div>
+        </div>
+
+        <div id="judgeMsg" class="msg hide"></div>
+
+        <div class="divider"></div>
+        <div class="row">
+          <div class="col">
+            <label>Categoria in uscita</label>
+            <input id="catRO" disabled>
+          </div>
+          <div style="min-width:140px">
+            <label>Start</label>
+            <input id="startRO" disabled>
+          </div>
+          <div class="col">
+            <label>Atleta</label>
+            <input id="athRO" disabled>
+          </div>
+        </div>
+
+        <div id="videoWrap" class="hide">
+          <label style="margin-top:10px">Video entry (riferimento)</label>
+          <div class="videoBox" id="videoBox"></div>
+          <div class="hint" id="videoHint" style="margin-top:6px"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <table>
+          <thead><tr><th>Criterio</th><th class="num">Voto (0–10)</th></tr></thead>
+          <tbody id="critBody"></tbody>
+          <tfoot>
+            <tr>
+              <th>Penalità (sottratte)</th>
+              <td class="num"><input id="pen" type="number" step="0.1" min="0" max="100" value="0.0"></td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <label style="margin-top:12px">Nota penalità (obbligatoria se penalità &gt; 0)</label>
+        <textarea id="note" placeholder="Scrivi la giustificazione..."></textarea>
+
+        <div class="judgeFooter">
+          <span class="badge ok">Totale: <b id="tot">0.0</b></span>
+          <span class="badge warn">Sync: <b id="sync">—</b></span>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <button id="btnSend" class="primary">Invia (definitivo)</button>
+          <button id="btnClear">Reset</button>
+        </div>
+      </div>
+
+      <!-- ADMIN PANEL -->
+      <div class="card" id="adminPanel">
+        <h2>Admin</h2>
+
+        <div id="pinBox">
+          <label>PIN Admin</label>
+          <div class="row">
+            <input id="pin" type="password" inputmode="numeric" placeholder="2478">
+            <button id="btnPin" class="primary">Sblocca</button>
+          </div>
+          <div class="hint" id="pinMsg"></div>
+        </div>
+
+        <div id="adminBody" class="hide">
+
+          <div class="row">
+            <button id="btnStartDay" class="primary">Avvia giornata</button>
+            <button id="btnStopDay">Ferma giornata</button>
+            <button id="btnFreeze">Blocca votazioni</button>
+            <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
+          </div>
+
+          <div class="msg warn" style="margin-top:10px">
+            L’Admin attiva <b>categoria per categoria</b> nell’ordine prestabilito. Senza attivazione: giudici e pubblico non votano.
+          </div>
+
+          <div class="divider"></div>
+          <div class="row">
+            <div class="col">
+              <label>Categoria da attivare (ordine prestabilito)</label>
+              <select id="adminCategory"></select>
+              <div class="hint">Quando attivi una categoria, parte da Start 1 e scorre sugli atleti del roster.</div>
+            </div>
+            <div style="min-width:240px">
+              <label>Azione categoria</label>
+              <div class="row">
+                <button id="btnActivateCategory" class="primary">Attiva categoria</button>
+                <button id="btnCloseCategory">Chiudi categoria</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <button id="btnPrevAth">← Atleta precedente</button>
+            <button id="btnNextAth" class="primary">Atleta successivo →</button>
+          </div>
+
+          <div class="divider"></div>
+          <h2 style="margin-top:0">Modifiche ultimo minuto</h2>
+
+          <div class="row">
+            <div class="col">
+              <label>Correggi nome atleta corrente</label>
+              <input id="fixAth" placeholder="Nuovo nome atleta">
+            </div>
+            <div style="min-width:200px">
+              <label>&nbsp;</label>
+              <button id="btnFixAth">Applica</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Correggi link video entry corrente</label>
+              <input id="fixVideo" placeholder="https://youtu.be/...">
+            </div>
+            <div style="min-width:200px">
+              <label>&nbsp;</label>
+              <button id="btnFixVideo">Applica</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <h2 style="margin-top:0">Gestione roster atleti</h2>
+
+          <div class="row">
+            <div class="col">
+              <label>Giornata / Sessione</label>
+              <select id="rosterSession">
+                <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
+                <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
+              </select>
+            </div>
+            <div class="col">
+              <label>Categoria</label>
+              <select id="rosterCategory"></select>
+            </div>
+          </div>
+
+          <label style="margin-top:10px">
+            Atleti (una riga = uno start). Facoltativo: “Nome | link video”
+          </label>
+          <textarea id="rosterText" placeholder="Esempio:
+Giulia Rossi | https://youtu.be/xxxx
+Martina Bianchi
+Elena Verdi | https://www.youtube.com/watch?v=yyyy"></textarea>
+
+          <div class="row" style="margin-top:10px">
+            <button id="btnRosterLoad">Ricarica roster</button>
+            <button id="btnRosterSave" class="primary">Salva roster</button>
+            <button id="btnRosterClear">Svuota</button>
+          </div>
+
+          <div class="hint" id="rosterInfo" style="margin-top:8px">—</div>
+          <div id="adminMsg" class="msg hide"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================
+       PUBLIC
+  ======================= -->
+  <div id="appPublic" class="hide">
+    <div class="publicWrap">
+      <div class="card center">
+        <div class="brand" style="justify-content:center; margin-bottom:8px">
+          <img id="brandLogo2" alt="Logo" style="height:38px" />
+        </div>
+
+        <div class="badge accent" style="justify-content:center">Premio del Pubblico</div>
+        <div class="hint" style="margin-top:10px">Dai il tuo voto agli atleti in gara</div>
+
+        <div style="margin-top:14px; font-size:18px; font-weight:900" id="pubAthlete">—</div>
+        <div class="hint" style="margin-top:6px" id="pubMeta">In attesa attivazione…</div>
+
+        <div style="margin-top:16px">
+          <div class="bigScore" id="pubValue">7</div>
+          <div class="hint">1 = non mi è piaciuto • 10 = strabiliante</div>
+          <input class="range" id="pubSlider" type="range" min="1" max="10" step="1" value="7">
+        </div>
+
+        <div class="row" style="justify-content:center; margin-top:14px">
+          <button id="pubVoteBtn" class="primary" disabled style="background:linear-gradient(135deg,var(--brand-gold),#b8962e); color:#1a1a1a; font-weight:800; border-color:rgba(212,175,55,.25);">
+            Vota
+          </button>
+        </div>
+
+        <div id="pubMsg" class="msg hide"></div>
+
+        <div class="hint" style="margin-top:12px">
+          Un solo voto per atleta su questo dispositivo.
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ======================
+   FIREBASE CONFIG
+====================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB-2_KfVwjnIoS8yo__k4FZBYMQ5xN6wR0",
+  authDomain: "votazioni-b93a0.firebaseapp.com",
+  projectId: "votazioni-b93a0",
+  storageBucket: "votazioni-b93a0.firebasestorage.app",
+  messagingSenderId: "597305511112",
+  appId: "1:597305511112:web:5eab508957aec0fe0969fd",
+  measurementId: "G-R26TFX0KMN"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ======================
+   BRAND (LOGO)
+   - Carica su Netlify in /assets/logo.png
+====================== */
+const BRAND = {
+  name: "Freestyle Aerial Competition",
+  subtitle: "Votazioni Live • Giudici + Pubblico",
+  logoUrl: "/assets/logo.png"
+};
+
+/* ======================
+   RULES
+====================== */
+const ADMIN_PIN = "2478";
+const CRITERI = ["Coreografia","Tecnica","Triks","Immagine","Presenza scenica","Performance generale"];
+
+const CATEGORY_ORDER = [
+  "Junior A",
+  "Junior B – Base",
+  "Teen – Base",
+  "Adulti – Base",
+  "Junior B – Intermedio",
+  "Teen – Intermedio",
+  "Adulti – Intermedio",
+  "Junior B – Avanzato",
+  "Teen – Avanzato",
+  "Adulti – Avanzato",
+  "Istruttori / Allenatori",
+  "Professional",
+  "Elite",
+  "Duo"
+];
+
+/* ======================
+   HELPERS
+====================== */
+const clamp = (x,min,max) => Number.isNaN(x) ? min : Math.max(min, Math.min(max, x));
+const fmt1 = (x) => (Math.round(x*10)/10).toFixed(1);
+const sum = (a) => a.reduce((p,c)=>p+c,0);
+const safeId = (s) => String(s||"").trim().replaceAll(" ", "_");
+
+function getUrlRole(){
+  const p = new URLSearchParams(location.search);
+  const r = (p.get("role")||"").toUpperCase().trim();
+  return ["ADMIN","J1","J2","J3","PUBLIC"].includes(r) ? r : null;
+}
+function roleKey(v){
+  return v==="J1"?"j1":(v==="J2"?"j2":(v==="J3"?"j3":null));
+}
+
+function rosterDocId(session, category){ return safeId(`${session}__${category}`); }
+function rosterRef(session, category){ return db.collection("rosters").doc(rosterDocId(session, category)); }
+
+function stateRef(session){ return db.collection("competition_state").doc(session); }
+
+function perfId(session, category, startNum){ return safeId(`${session}__${category}__${startNum}`); }
+function perfRef(session, category, startNum){ return db.collection("performances").doc(perfId(session, category, startNum)); }
+
+// Public device lock
+const LS_DEVICE_ID = "fac_pub_device_v3";
+function getDeviceId(){
+  let id = localStorage.getItem(LS_DEVICE_ID);
+  if (!id){
+    id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+    localStorage.setItem(LS_DEVICE_ID, id);
+  }
+  return id;
+}
+function localVotedKey(perfIdStr){ return `fac_voted_${perfIdStr}`; }
+function voteDocRef(perfIdStr){
+  return db.collection("public_votes").doc(`${perfIdStr}__${getDeviceId()}`);
+}
+
+// Video: YouTube embed
+function toYouTubeEmbed(url){
+  if (!url) return null;
+  const u = String(url).trim();
+  let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  m = u.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  return null;
+}
+
+/* ======================
+   UI REFS
+====================== */
+const brandLogo = document.getElementById("brandLogo");
+const brandLogo2 = document.getElementById("brandLogo2");
+const brandName = document.getElementById("brandName");
+const brandSubtitle = document.getElementById("brandSubtitle");
+
+const toggleThemeBtn = document.getElementById("toggleTheme");
+const envBadge = document.getElementById("envBadge");
+
+const appMain = document.getElementById("appMain");
+const appPublic = document.getElementById("appPublic");
+
+const ruolo = document.getElementById("ruolo");
+const sessione = document.getElementById("sessione");
+const roleLockHint = document.getElementById("roleLockHint");
+
+const stateBadge = document.getElementById("stateBadge");
+const stateLine = document.getElementById("stateLine");
+
+const who = document.getElementById("who");
+const freezeBadge = document.getElementById("freezeBadge");
+const submittedBadge = document.getElementById("submittedBadge");
+const judgeMsg = document.getElementById("judgeMsg");
+
+const catRO = document.getElementById("catRO");
+const startRO = document.getElementById("startRO");
+const athRO = document.getElementById("athRO");
+
+const videoWrap = document.getElementById("videoWrap");
+const videoBox = document.getElementById("videoBox");
+const videoHint = document.getElementById("videoHint");
+
+const critBody = document.getElementById("critBody");
+const pen = document.getElementById("pen");
+const note = document.getElementById("note");
+const tot = document.getElementById("tot");
+const sync = document.getElementById("sync");
+const btnSend = document.getElementById("btnSend");
+const btnClear = document.getElementById("btnClear");
+
+const pinBox = document.getElementById("pinBox");
+const pin = document.getElementById("pin");
+const btnPin = document.getElementById("btnPin");
+const pinMsg = document.getElementById("pinMsg");
+const adminBody = document.getElementById("adminBody");
+const adminMsg = document.getElementById("adminMsg");
+
+const btnStartDay = document.getElementById("btnStartDay");
+const btnStopDay = document.getElementById("btnStopDay");
+const btnFreeze = document.getElementById("btnFreeze");
+const btnUnfreeze = document.getElementById("btnUnfreeze");
+
+const adminCategory = document.getElementById("adminCategory");
+const btnActivateCategory = document.getElementById("btnActivateCategory");
+const btnCloseCategory = document.getElementById("btnCloseCategory");
+const btnPrevAth = document.getElementById("btnPrevAth");
+const btnNextAth = document.getElementById("btnNextAth");
+
+const fixAth = document.getElementById("fixAth");
+const fixVideo = document.getElementById("fixVideo");
+const btnFixAth = document.getElementById("btnFixAth");
+const btnFixVideo = document.getElementById("btnFixVideo");
+
+const rosterSession = document.getElementById("rosterSession");
+const rosterCategory = document.getElementById("rosterCategory");
+const rosterText = document.getElementById("rosterText");
+const btnRosterLoad = document.getElementById("btnRosterLoad");
+const btnRosterSave = document.getElementById("btnRosterSave");
+const btnRosterClear = document.getElementById("btnRosterClear");
+const rosterInfo = document.getElementById("rosterInfo");
+
+// Public
+const pubAthlete = document.getElementById("pubAthlete");
+const pubMeta = document.getElementById("pubMeta");
+const pubSlider = document.getElementById("pubSlider");
+const pubValue = document.getElementById("pubValue");
+const pubVoteBtn = document.getElementById("pubVoteBtn");
+const pubMsg = document.getElementById("pubMsg");
+
+/* ======================
+   APPLY BRAND
+====================== */
+brandName.textContent = BRAND.name;
+brandSubtitle.textContent = BRAND.subtitle;
+brandLogo.src = BRAND.logoUrl;
+brandLogo2.src = BRAND.logoUrl;
+
+/* ======================
+   DARK STAGE TOGGLE (LOCAL)
+====================== */
+const THEME_KEY = "fac_theme";
+function applyTheme(theme){
+  if (theme === "dark"){
+    document.body.classList.add("dark");
+    toggleThemeBtn.textContent = "☀️ Light Mode";
+  } else {
+    document.body.classList.remove("dark");
+    toggleThemeBtn.textContent = "🌙 Dark Stage";
+  }
+  localStorage.setItem(THEME_KEY, theme);
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "light");
+toggleThemeBtn.onclick = () => {
+  const cur = document.body.classList.contains("dark") ? "dark" : "light";
+  applyTheme(cur === "dark" ? "light" : "dark");
+};
+
+/* ======================
+   ROLE LOCK FROM URL
+====================== */
+const forcedRole = getUrlRole();
+if (forcedRole){
+  ruolo.value = forcedRole;
+  ruolo.disabled = true;
+  roleLockHint.textContent = "Ruolo bloccato dal link";
+}
+
+/* ======================
+   ADMIN AUTH
+====================== */
+const LS_ADMIN_OK = "fac_admin_ok_v3";
+const isAdmin = () => ruolo.value === "ADMIN";
+const isPublic = () => ruolo.value === "PUBLIC";
+const isJudge = () => ["J1","J2","J3"].includes(ruolo.value);
+const isAdminUnlocked = () => localStorage.getItem(LS_ADMIN_OK)==="1";
+
+function lockAdmin(){
+  localStorage.removeItem(LS_ADMIN_OK);
+  pinBox.classList.remove("hide");
+  adminBody.classList.add("hide");
+  pinMsg.textContent = "";
+}
+function unlockAdmin(){
+  localStorage.setItem(LS_ADMIN_OK,"1");
+  pinBox.classList.add("hide");
+  adminBody.classList.remove("hide");
+  pinMsg.textContent = "";
+}
+btnPin.onclick = () => {
+  if ((pin.value||"").trim() === ADMIN_PIN) unlockAdmin();
+  else pinMsg.textContent = "PIN non corretto.";
+};
+
+/* ======================
+   UI HELPERS
+====================== */
+function showMsg(el, type, txt){
+  el.classList.remove("hide","ok","bad","warn");
+  el.classList.add(type);
+  el.textContent = txt;
+}
+function hideMsg(el){
+  el.classList.add("hide");
+  el.textContent = "";
+  el.classList.remove("ok","bad","warn");
+}
+function setJudgeEnabled(en){
+  critInputs.forEach(i=>i.disabled=!en);
+  pen.disabled=!en; note.disabled=!en; btnSend.disabled=!en; btnClear.disabled=!en;
+}
+function setStateBadge(kind, text){
+  stateBadge.className = "badge " + kind;
+  stateBadge.textContent = text;
+}
+function clearVideo(){
+  videoBox.innerHTML = "";
+  videoWrap.classList.add("hide");
+  videoHint.textContent = "";
+}
+function renderVideo(url){
+  const embed = toYouTubeEmbed(url);
+  if (!embed){ clearVideo(); return; }
+  videoWrap.classList.remove("hide");
+  videoBox.innerHTML = `<iframe src="${embed}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  videoHint.textContent = "YouTube embed (solo riferimento).";
+}
+
+/* ======================
+   BUILD CRITERIA
+====================== */
+const critInputs = [];
+function buildCriteria(){
+  critBody.innerHTML = "";
+  critInputs.length = 0;
+
+  CRITERI.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${c}</td><td class="num"><input type="number" min="0" max="10" step="0.1" value="0.0"></td>`;
+    const inp = tr.querySelector("input");
+    inp.oninput = () => { inp.value = fmt1(clamp(parseFloat(inp.value),0,10)); recalc(); };
+    critBody.appendChild(tr);
+    critInputs.push(inp);
+  });
+
+  pen.oninput = () => { pen.value = fmt1(clamp(parseFloat(pen.value),0,100)); recalc(); };
+  recalc();
+}
+function recalc(){
+  const s = critInputs.map(i=>clamp(parseFloat(i.value),0,10));
+  const p = clamp(parseFloat(pen.value),0,100);
+  tot.textContent = fmt1(sum(s) - p);
+}
+
+/* ======================
+   CATEGORY MENUS
+====================== */
+function fillCategorySelect(sel){
+  sel.innerHTML = CATEGORY_ORDER.map((c,i)=>`<option value="${c}">${i+1}. ${c}</option>`).join("");
+}
+fillCategorySelect(adminCategory);
+fillCategorySelect(rosterCategory);
+
+/* ======================
+   STATE + PERFORMANCE (CORE)
+====================== */
+let unsubState = null;
+let currentState = null;
+
+let unsubPerf = null;
+let lastPerfDoc = null;
+
+function listenState(){
+  if (unsubState) unsubState();
+  unsubState = stateRef(sessione.value).onSnapshot((snap) => {
+    currentState = snap.exists ? snap.data() : null;
+    refreshFromState();
+  });
+}
+
+function listenPerformanceForJudges(){
+  if (unsubPerf){ unsubPerf(); unsubPerf = null; }
+  lastPerfDoc = null;
+
+  if (!isJudge()) return;
+  if (!currentState || currentState.active !== true) return;
+
+  const cat = currentState.categoryName;
+  const st = currentState.start;
+  if (!cat || !st) return;
+
+  const ref = perfRef(sessione.value, cat, st);
+  unsubPerf = ref.onSnapshot((snap) => {
+    lastPerfDoc = snap.exists ? snap.data() : null;
+
+    const rk = roleKey(ruolo.value);
+    const mine = lastPerfDoc?.judges?.[rk];
+    const submitted = mine?.submitted === true;
+
+    submittedBadge.classList.toggle("hide", !submitted);
+
+    // state lock/active handles enable
+    if (!currentState || currentState.active !== true || currentState.locked === true || currentState.categoryActive !== true){
+      setJudgeEnabled(false);
+      return;
+    }
+
+    if (submitted){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "ok", "Hai già inviato: definitivo.");
+      if (mine?.scores?.length === 6){
+        mine.scores.forEach((v,i)=>{ if (critInputs[i]) critInputs[i].value = fmt1(clamp(parseFloat(v),0,10)); });
+        pen.value = fmt1(clamp(parseFloat(mine.penalty||0),0,100));
+        note.value = mine.note || "";
+        recalc();
+      }
+      sync.textContent = "Inviato";
+      return;
+    }
+
+    setJudgeEnabled(true);
+    hideMsg(judgeMsg);
+
+    if (mine?.scores?.length === 6){
+      mine.scores.forEach((v,i)=>{ if (critInputs[i]) critInputs[i].value = fmt1(clamp(parseFloat(v),0,10)); });
+      pen.value = fmt1(clamp(parseFloat(mine.penalty||0),0,100));
+      note.value = mine.note || "";
+      recalc();
+      sync.textContent = "Sincronizzato";
+    } else {
+      sync.textContent = "—";
+    }
+  });
+}
+
+function refreshFromState(){
+  const st = currentState;
+
+  if (!st || st.active !== true){
+    setStateBadge("warn", "In attesa");
+    stateLine.textContent = "Gara non attiva.";
+    freezeBadge.classList.add("hide");
+
+    catRO.value = ""; startRO.value = ""; athRO.value = "";
+    clearVideo();
+
+    if (isJudge()){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", "In attesa attivazione Admin.");
+    }
+    if (isPublic()){
+      applyPublic(null, "In attesa attivazione…");
+    }
+    return;
+  }
+
+  const frozen = st.locked === true;
+  freezeBadge.classList.toggle("hide", !frozen);
+
+  setStateBadge(frozen ? "bad" : "ok", frozen ? "Bloccata" : "Attiva");
+
+  if (st.categoryActive !== true){
+    stateLine.textContent = "In attesa prossima categoria…";
+    catRO.value = ""; startRO.value = ""; athRO.value = "";
+    clearVideo();
+
+    if (isJudge()){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", frozen ? "Votazioni bloccate dall’Admin." : "In attesa attivazione categoria.");
+    }
+    if (isPublic()){
+      applyPublic(null, frozen ? "Votazioni momentaneamente bloccate." : "In attesa prossima categoria…");
+    }
+
+    if (isAdmin() && isAdminUnlocked()){
+      btnUnfreeze.classList.toggle("hide", !frozen);
+      btnFreeze.classList.toggle("hide", frozen);
+    }
+    return;
+  }
+
+  stateLine.textContent = `${st.categoryName || "—"} • Start ${st.start || "—"} • ${st.athleteName || "—"}`;
+
+  catRO.value = st.categoryName || "";
+  startRO.value = String(st.start || "");
+  athRO.value = st.athleteName || "";
+
+  if (st.videoUrl) renderVideo(st.videoUrl);
+  else clearVideo();
+
+  if (isJudge()){
+    if (frozen){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
+    } else {
+      // enable depends on performance submitted status; perf listener will manage
+      hideMsg(judgeMsg);
+    }
+  }
+
+  if (isPublic()){
+    if (frozen){
+      applyPublic(null, "Votazioni momentaneamente bloccate.");
+    } else {
+      applyPublic(st, null);
+    }
+  }
+
+  if (isAdmin() && isAdminUnlocked()){
+    btnUnfreeze.classList.toggle("hide", !frozen);
+    btnFreeze.classList.toggle("hide", frozen);
+  }
+
+  // ensure judges follow the current athlete
+  if (isJudge()) listenPerformanceForJudges();
+}
+
+/* ======================
+   ADMIN: ROSTER LOAD/SAVE
+====================== */
+async function readRoster(session, category){
+  const snap = await rosterRef(session, category).get();
+  if (!snap.exists) return [];
+  const d = snap.data() || {};
+  const names = Array.isArray(d.names) ? d.names : [];
+  return names.map(x => {
+    if (typeof x === "string") return { name: x.trim(), videoUrl: "" };
+    return { name: String(x.name||"").trim(), videoUrl: String(x.videoUrl||"").trim() };
+  }).filter(x => x.name);
+}
+
+function parseRosterLines(text){
+  const lines = String(text||"").split("\n").map(l=>l.trim()).filter(Boolean);
+  return lines.map(line => {
+    const parts = line.split("|").map(x=>x.trim()).filter(Boolean);
+    const name = parts[0] || "";
+    const videoUrl = parts[1] || "";
+    return { name, videoUrl };
+  }).filter(x => x.name);
+}
+function formatRosterLines(items){
+  return items.map(x => x.videoUrl ? `${x.name} | ${x.videoUrl}` : x.name).join("\n");
+}
+
+async function rosterLoad(){
+  const sess = rosterSession.value;
+  const cat = rosterCategory.value;
+  const items = await readRoster(sess, cat);
+  rosterText.value = formatRosterLines(items);
+  rosterInfo.textContent = `Atleti: ${items.length} • Start previsti: 1 → ${items.length}`;
+}
+
+async function rosterSave(){
+  const sess = rosterSession.value;
+  const cat = rosterCategory.value;
+  const items = parseRosterLines(rosterText.value);
+
+  await rosterRef(sess, cat).set({ names: items, updatedAt: Date.now() }, { merge:true });
+  rosterInfo.textContent = `Salvato • Atleti: ${items.length} • Start: 1 → ${items.length}`;
+  showMsg(adminMsg, "ok", "Roster salvato correttamente.");
+}
+
+btnRosterLoad.onclick = rosterLoad;
+btnRosterSave.onclick = rosterSave;
+btnRosterClear.onclick = () => { rosterText.value=""; rosterInfo.textContent="—"; };
+
+/* ======================
+   ADMIN: COMPETITION FLOW
+====================== */
+async function ensurePerformanceDoc(categoryName, startNum, athleteName, videoUrl){
+  const ref = perfRef(sessione.value, categoryName, startNum);
+  await ref.set({
+    sessione: sessione.value,
+    categoria: categoryName,
+    start: String(startNum),
+    atleta: athleteName || "",
+    videoUrl: videoUrl || "",
+    status: { closed:false }
+  }, { merge:true });
+}
+
+async function adminStartDay(){
+  const sess = sessione.value;
+  await stateRef(sess).set({
+    active: true,
+    locked: false,
+    categoryActive: false,
+    categoryIndex: null,
+    categoryName: null,
+    start: null,
+    athleteName: null,
+    videoUrl: null,
+    updatedAt: Date.now()
+  }, { merge:true });
+  showMsg(adminMsg, "ok", "Giornata avviata. Ora attiva una categoria.");
+}
+
+async function adminStopDay(){
+  const sess = sessione.value;
+  await stateRef(sess).set({
+    active: false,
+    locked: false,
+    categoryActive: false,
+    updatedAt: Date.now()
+  }, { merge:true });
+  showMsg(adminMsg, "warn", "Giornata fermata. Giudici e pubblico disabilitati.");
+}
+
+async function adminFreeze(on){
+  const sess = sessione.value;
+  await stateRef(sess).set({ locked: !!on, updatedAt: Date.now() }, { merge:true });
+  showMsg(adminMsg, on ? "warn" : "ok", on ? "Votazioni bloccate." : "Votazioni sbloccate.");
+}
+
+async function adminActivateCategory(){
+  const sess = sessione.value;
+  const catName = adminCategory.value;
+
+  const roster = await readRoster(sess, catName);
+  if (!roster.length){
+    showMsg(adminMsg, "bad", "Roster vuoto per questa categoria. Carica prima gli atleti.");
+    return;
+  }
+
+  const athlete = roster[0]?.name || "";
+  const videoUrl = roster[0]?.videoUrl || "";
+
+  await stateRef(sess).set({
+    active: true,
+    categoryActive: true,
+    locked: false,
+    categoryIndex: CATEGORY_ORDER.indexOf(catName),
+    categoryName: catName,
+    start: 1,
+    athleteName: athlete,
+    videoUrl,
+    updatedAt: Date.now()
+  }, { merge:true });
+
+  await ensurePerformanceDoc(catName, 1, athlete, videoUrl);
+
+  showMsg(adminMsg, "ok", `Categoria attivata: ${catName} (Start 1).`);
+}
+
+async function adminCloseCategory(){
+  const sess = sessione.value;
+  await stateRef(sess).set({
+    categoryActive: false,
+    start: null,
+    athleteName: null,
+    videoUrl: null,
+    updatedAt: Date.now()
+  }, { merge:true });
+  showMsg(adminMsg, "warn", "Categoria chiusa. Attiva la prossima quando vuoi.");
+}
+
+async function adminStepAthlete(delta){
+  const sess = sessione.value;
+  const snap = await stateRef(sess).get();
+  if (!snap.exists) return;
+  const st = snap.data();
+
+  if (st.active !== true){
+    showMsg(adminMsg, "bad", "Giornata non attiva.");
+    return;
+  }
+  if (st.categoryActive !== true){
+    showMsg(adminMsg, "bad", "Nessuna categoria attiva.");
+    return;
+  }
+
+  const catName = st.categoryName;
+  const roster = await readRoster(sess, catName);
+
+  let nextStart = (parseInt(st.start,10) || 1) + delta;
+  if (nextStart < 1) nextStart = 1;
+
+  // stop automatico quando finisce roster
+  if (nextStart > roster.length){
+    await stateRef(sess).set({
+      categoryActive: false,
+      start: null,
+      athleteName: null,
+      videoUrl: null,
+      updatedAt: Date.now()
+    }, { merge:true });
+
+    showMsg(adminMsg, "ok", "Categoria completata (fine roster). Attiva la prossima categoria.");
+    return;
+  }
+
+  const athlete = roster[nextStart-1]?.name || "";
+  const videoUrl = roster[nextStart-1]?.videoUrl || "";
+
+  await stateRef(sess).set({
+    start: nextStart,
+    athleteName: athlete,
+    videoUrl,
+    updatedAt: Date.now()
+  }, { merge:true });
+
+  await ensurePerformanceDoc(catName, nextStart, athlete, videoUrl);
+
+  showMsg(adminMsg, "ok", `Ora: ${catName} • Start ${nextStart} • ${athlete || "—"}`);
+}
+
+async function adminFixAthleteName(){
+  const sess = sessione.value;
+  const name = (fixAth.value||"").trim();
+  if (!name){ showMsg(adminMsg, "bad", "Inserisci un nome atleta."); return; }
+
+  const st = currentState;
+  if (!st?.categoryName || !st?.start){ showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere."); return; }
+
+  await stateRef(sess).set({ athleteName: name, updatedAt: Date.now() }, { merge:true });
+  await perfRef(sess, st.categoryName, st.start).set({ atleta: name }, { merge:true });
+
+  showMsg(adminMsg, "ok", "Nome atleta aggiornato.");
+  fixAth.value = "";
+}
+
+async function adminFixVideoUrl(){
+  const sess = sessione.value;
+  const url = (fixVideo.value||"").trim();
+
+  const st = currentState;
+  if (!st?.categoryName || !st?.start){ showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere."); return; }
+
+  await stateRef(sess).set({ videoUrl: url, updatedAt: Date.now() }, { merge:true });
+  await perfRef(sess, st.categoryName, st.start).set({ videoUrl: url }, { merge:true });
+
+  showMsg(adminMsg, "ok", "Video entry aggiornato.");
+  fixVideo.value = "";
+}
+
+btnStartDay.onclick = adminStartDay;
+btnStopDay.onclick = adminStopDay;
+btnFreeze.onclick = () => adminFreeze(true);
+btnUnfreeze.onclick = () => adminFreeze(false);
+
+btnActivateCategory.onclick = adminActivateCategory;
+btnCloseCategory.onclick = adminCloseCategory;
+btnPrevAth.onclick = () => adminStepAthlete(-1);
+btnNextAth.onclick = () => adminStepAthlete(+1);
+
+btnFixAth.onclick = adminFixAthleteName;
+btnFixVideo.onclick = adminFixVideoUrl;
+
+/* ======================
+   JUDGE SUBMIT
+====================== */
+btnSend.onclick = async () => {
+  if (!isJudge()) return;
+
+  if (!currentState || currentState.active !== true){
+    showMsg(judgeMsg, "warn", "In attesa attivazione Admin.");
+    return;
+  }
+  if (currentState.locked === true){
+    showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
+    return;
+  }
+  if (currentState.categoryActive !== true){
+    showMsg(judgeMsg, "warn", "Nessuna categoria attiva.");
+    return;
+  }
+
+  const rk = roleKey(ruolo.value);
+  const cat = currentState.categoryName;
+  const st = currentState.start;
+
+  if (!cat || !st){
+    showMsg(judgeMsg, "bad", "Scheda non pronta.");
+    return;
+  }
+
+  const ref = perfRef(sessione.value, cat, st);
+  const snap = await ref.get();
+  const d = snap.exists ? snap.data() : null;
+  if (d?.judges?.[rk]?.submitted === true){
+    showMsg(judgeMsg, "ok", "Hai già inviato: definitivo.");
+    return;
+  }
+
+  const scores = critInputs.map(i => +fmt1(clamp(parseFloat(i.value),0,10)));
+  const penalty = +fmt1(clamp(parseFloat(pen.value),0,100));
+  const nt = (note.value||"").trim();
+
+  if (penalty > 0 && !nt){
+    showMsg(judgeMsg, "bad", "Penalità > 0: nota obbligatoria.");
+    note.focus();
+    return;
+  }
+
+  await ref.set({
+    judges: { [rk]: { scores, penalty, note: nt, submitted:true, submittedAt: Date.now() } }
+  }, { merge:true });
+
+  sync.textContent = "Inviato";
+  showMsg(judgeMsg, "ok", "Voti inviati. Grazie.");
+};
+
+btnClear.onclick = () => {
+  if (!isJudge()) return;
+  critInputs.forEach(i=>i.value="0.0");
+  pen.value="0.0"; note.value="";
+  recalc();
+};
+
+/* ======================
+   PUBLIC
+====================== */
+function showPub(type, txt){
+  pubMsg.classList.remove("hide","ok","bad","warn");
+  pubMsg.classList.add(type);
+  pubMsg.textContent = txt;
+}
+function hidePub(){
+  pubMsg.classList.add("hide");
+  pubMsg.textContent = "";
+  pubMsg.classList.remove("ok","bad","warn");
+}
+pubSlider.oninput = () => { pubValue.textContent = String(pubSlider.value); };
+
+function applyPublic(st, forcedMessage){
+  if (!st || st.active !== true){
+    pubAthlete.textContent = "—";
+    pubMeta.textContent = forcedMessage || "In attesa attivazione…";
+    pubVoteBtn.disabled = true;
+    if (forcedMessage) showPub("warn", forcedMessage); else hidePub();
+    return;
+  }
+  if (st.categoryActive !== true){
+    pubAthlete.textContent = "—";
+    pubMeta.textContent = forcedMessage || "In attesa prossima categoria…";
+    pubVoteBtn.disabled = true;
+    if (forcedMessage) showPub("warn", forcedMessage); else hidePub();
+    return;
+  }
+
+  const pid = perfId(sessione.value, st.categoryName, st.start);
+  pubAthlete.textContent = st.athleteName || "Atleta";
+  pubMeta.textContent = `${st.categoryName || ""} • Start ${st.start || ""}`.trim();
+
+  const already = localStorage.getItem(localVotedKey(pid)) === "1";
+  pubVoteBtn.disabled = already;
+
+  if (already) showPub("ok", "Hai già votato questo atleta su questo dispositivo. Grazie!");
+  else hidePub();
+
+  pubVoteBtn.onclick = async () => {
+    if (localStorage.getItem(localVotedKey(pid)) === "1"){
+      pubVoteBtn.disabled = true;
+      showPub("ok", "Hai già votato questo atleta.");
+      return;
+    }
+    const value = parseInt(pubSlider.value,10);
+    await voteDocRef(pid).set({
+      sessione: sessione.value,
+      perfId: pid,
+      categoria: st.categoryName || "",
+      start: String(st.start || ""),
+      atleta: st.athleteName || "",
+      value,
+      deviceId: getDeviceId(),
+      createdAt: Date.now()
+    }, { merge:true });
+
+    localStorage.setItem(localVotedKey(pid), "1");
+    pubVoteBtn.disabled = true;
+    showPub("ok", "Voto registrato. Grazie!");
+  };
+}
+
+/* ======================
+   MODE SWITCH
+====================== */
+function showPublicMode(){
+  appMain.classList.add("hide");
+  appPublic.classList.remove("hide");
+}
+function showMainMode(){
+  appPublic.classList.add("hide");
+  appMain.classList.remove("hide");
+}
+
+function refreshMode(){
+  who.textContent = ruolo.value;
+
+  if (isPublic()) showPublicMode();
+  else showMainMode();
+
+  if (isAdmin()){
+    if (isAdminUnlocked()) unlockAdmin();
+    else lockAdmin();
+  } else {
+    pinBox.classList.add("hide");
+    adminBody.classList.add("hide");
+  }
+}
+
+/* ======================
+   INIT
+====================== */
+buildCriteria();
+refreshMode();
+listenState();
+
+// keep roster session aligned
+rosterSession.value = sessione.value;
+
+// on changes
+ruolo.onchange = () => {
+  submittedBadge.classList.add("hide");
+  sync.textContent = "—";
+  clearVideo();
+  refreshMode();
+  if (isJudge()) listenPerformanceForJudges();
+};
+
+sessione.onchange = () => {
+  rosterSession.value = sessione.value;
+  listenState();
+  if (isJudge()) listenPerformanceForJudges();
+};
+
+// network badge
+window.addEventListener("online",  ()=> envBadge.textContent = "Online");
+window.addEventListener("offline", ()=> envBadge.textContent = "Offline");
+</script>
+</body>
+</html>

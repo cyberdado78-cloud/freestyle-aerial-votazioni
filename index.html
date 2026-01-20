@@ -287,6 +287,37 @@
       color: #ffffff;
       border-color: var(--brand-gold);
     }
+ /* Admin sections */
+details.section{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--card);
+  box-shadow:var(--shadow);
+  margin:12px 0;
+}
+details.section > summary{
+  cursor:pointer;
+  padding:12px 14px;
+  font-weight:900;
+  letter-spacing:.35px;
+  text-transform:uppercase;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+details.section > summary::-webkit-details-marker{ display:none; }
+details.section[open] > summary{ border-bottom:1px solid var(--line); }
+.sectionBody{ padding:12px 14px; }
+.kpi{ display:flex; gap:10px; flex-wrap:wrap; }
+.kpi .badge{ font-weight:900; }
+canvas.chart{
+  width:100%;
+  max-width:520px;
+  background:rgba(0,0,0,.02);
+  border:1px solid var(--line);
+  border-radius:14px;
+}
+
   </style>
 </head>
 
@@ -315,7 +346,8 @@
 
     <div class="card">
       <div class="row">
-        <div class="col" style="min-width:240px; flex:0 0 auto;">
+        <div class="col" id="roleBox" style="min-width:240px; flex:0 0 auto;">
+
           <label>Ruolo</label>
           <select id="ruolo">
             <option value="ADMIN">Admin</option>
@@ -327,7 +359,9 @@
           <div class="hint" id="roleLockHint"></div>
         </div>
 
-        <div class="col" style="min-width:280px; flex:0 0 auto;">
+        <div class="col" id="sessionBox" style="min-width:280px; flex:0 0 auto;">
+
+
           <label>Giornata / Sessione</label>
           <select id="sessione">
             <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
@@ -425,13 +459,17 @@
         </div>
 
         <div id="adminBody" class="hide">
+<details class="section" open>
+  <summary>Regia giornata <span class="badge accent">LIVE</span></summary>
+  <div class="sectionBody">
 
           <div class="row">
             <button id="btnStartDay" class="primary">Avvia giornata</button>
             <button id="btnStopDay">Ferma giornata</button>
             <button id="btnFreeze">Blocca votazioni</button>
             <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
-          </div>
+         </div>
+</details>  </div>
 
           <div class="msg warn" style="margin-top:10px">
             L’Admin attiva <b>categoria per categoria</b> nell’ordine prestabilito. Senza attivazione: giudici e pubblico non votano.
@@ -459,6 +497,42 @@
           </div>
 
           <div class="divider"></div>
+        <details class="section" open>
+  <summary>Monitor categoria <span class="badge accent-2">Realtime</span></summary>
+  <div class="sectionBody">
+    <div class="kpi">
+      <span class="badge warn" id="adminMonCat">Categoria: —</span>
+      <span class="badge warn" id="adminMonNow">Atleta: —</span>
+      <span class="badge accent" id="adminMonCount">—</span>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <div class="col" style="min-width:260px; flex:0 0 auto;">
+        <label>Progress votazioni (0/3 → 3/3)</label>
+        <canvas id="adminPie" class="chart" width="260" height="260"></canvas>
+      </div>
+      <div class="col">
+        <label>Punteggi finali (solo completi)</label>
+        <canvas id="adminBars" class="chart" width="520" height="260"></canvas>
+      </div>
+    </div>
+
+    <div style="margin-top:12px; overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Start</th>
+            <th>Atleta</th>
+            <th class="num">Voti</th>
+            <th class="num">Finale</th>
+          </tr>
+        </thead>
+        <tbody id="adminMonBody"></tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
           <h2 style="margin-top:0">Modifiche ultimo minuto</h2>
 
           <div class="row">
@@ -520,7 +594,8 @@
 </div>
 
           <h2 style="margin-top:0">Gestione roster atleti</h2>
-
+ </div>
+</details>
           <div class="row">
             <div class="col">
               <label>Giornata / Sessione</label>
@@ -982,6 +1057,24 @@ toggleThemeBtn.onclick = () => {
 const forcedRole = getUrlRole();
 if (forcedRole){
   ruolo.value = forcedRole;
+  // 🔒 Giudici e Pubblico: niente scelta ruolo/sessione (li gestisce l'Admin)
+const roleBox = document.getElementById("roleBox");
+const sessionBox = document.getElementById("sessionBox");
+
+function lockRoleAndSessionForNonAdmin(){
+  if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
+    ruolo.disabled = true;
+    sessione.disabled = true;
+    if (roleBox) roleBox.classList.add("hide");
+    if (sessionBox) sessionBox.classList.add("hide");
+    roleLockHint.textContent = "Gestito dall’Admin";
+  } else {
+    if (roleBox) roleBox.classList.remove("hide");
+    if (sessionBox) sessionBox.classList.remove("hide");
+  }
+}
+lockRoleAndSessionForNonAdmin();
+
   ruolo.disabled = true;
   roleLockHint.textContent = "Ruolo bloccato dal link";
 }
@@ -1603,9 +1696,18 @@ btnSend.onclick = async () => {
     return;
   }
 
-  await ref.set({
-    judges: { [rk]: { scores, penalty, note: nt, submitted:true, submittedAt: Date.now() } }
-  }, { merge:true });
+ await ref.set({
+  // campi base per query Admin/monitor
+  sessione: sessione.value,
+  categoria: cat,
+  start: String(st),
+  atleta: currentState.athleteName || "",
+  videoUrl: currentState.videoUrl || "",
+
+  // voto giudice
+  judges: { [rk]: { scores, penalty, note: nt, submitted:true, submittedAt: Date.now() } }
+}, { merge:true });
+
 
   sync.textContent = "Inviato";
   showMsg(judgeMsg, "ok", "Voti inviati. Grazie.");
@@ -1697,6 +1799,18 @@ function showMainMode(){
 
 function refreshMode(){
   who.textContent = ruolo.value;
+const roleBox = document.getElementById("roleBox");
+const sessionBox = document.getElementById("sessionBox");
+
+if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
+  if (roleBox) roleBox.classList.add("hide");
+  if (sessionBox) sessionBox.classList.add("hide");
+  ruolo.disabled = true;
+  sessione.disabled = true;
+} else {
+  if (roleBox) roleBox.classList.remove("hide");
+  if (sessionBox) sessionBox.classList.remove("hide");
+}
 
   if (isPublic()) showPublicMode();
   else showMainMode();

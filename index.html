@@ -1186,7 +1186,31 @@ function listenAdminLive(){
     });
 
     adminLiveCount.textContent = `${perfDocs.length} performance`;
+// ====== grafici (0/3–3/3) + barre + linea ======
+let c0=0,c1=0,c2=0,c3=0;
+const bars = [];
+const line = [];
 
+perfDocs.forEach(p=>{
+  if (p.votedCount === 0) c0++;
+  else if (p.votedCount === 1) c1++;
+  else if (p.votedCount === 2) c2++;
+  else if (p.votedCount === 3) c3++;
+
+  if (typeof p.finalAvg === "number"){
+    bars.push({ xLabel: String(p.startNum), value: p.finalAvg });
+    line.push({ x: p.startNum, y: p.finalAvg });
+  }
+});
+
+// ordina per start
+bars.sort((a,b)=>Number(a.xLabel)-Number(b.xLabel));
+line.sort((a,b)=>a.x-b.x);
+
+// disegna
+drawPie(adminPie, [c0,c1,c2,c3]);
+drawBars(adminBars, bars);
+drawLine(adminLine, line);
     const standingsMap = await loadStandingsMap(sess, cat);
     renderAdminLiveTable(perfDocs, standingsMap);
   });

@@ -2055,6 +2055,26 @@ sessione.onchange = () => {
 // network badge
 window.addEventListener("online",  ()=> envBadge.textContent = "Online");
 window.addEventListener("offline", ()=> envBadge.textContent = "Offline");
+  // ✅ FORCE: riempi sempre i menu categorie quando la pagina è pronta
+window.addEventListener("DOMContentLoaded", () => {
+  try {
+    const adminCategoryEl = document.getElementById("adminCategory");
+    const rosterCategoryEl = document.getElementById("rosterCategory");
+
+    if (typeof fillCategorySelect === "function") {
+      if (adminCategoryEl) fillCategorySelect(adminCategoryEl);
+      if (rosterCategoryEl) fillCategorySelect(rosterCategoryEl);
+    }
+
+    // Admin: il menu categoria deve essere selezionabile
+    if (adminCategoryEl && ruolo?.value === "ADMIN") {
+      adminCategoryEl.disabled = false;
+    }
+  } catch (e) {
+    console.error("FORCE category fill error:", e);
+  }
+});
+
 </script>
 </body>
 </html>

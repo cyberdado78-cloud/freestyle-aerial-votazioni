@@ -513,7 +513,9 @@ canvas.chart{
       </div>
       <div class="col">
         <label>Punteggi finali (solo completi)</label>
-        <canvas id="adminBars" class="chart" width="520" height="260"></canvas>
+       <canvas id="adminBars" class="chart" width="520" height="240"></canvas>
+<div style="height:10px"></div>
+<canvas id="adminLine" class="chart" width="520" height="240"></canvas>
       </div>
     </div>
 
@@ -706,16 +708,19 @@ const CATEGORY_ORDER = [
   "Junior B – Base",
   "Teen – Base",
   "Adulti – Base",
+  "Senior - Base",
   "Junior B – Intermedio",
   "Teen – Intermedio",
   "Adulti – Intermedio",
+  "Senior - Intermedio",
   "Junior B – Avanzato",
   "Teen – Avanzato",
   "Adulti – Avanzato",
+  "Senior - Avanzato",
   "Istruttori / Allenatori",
   "Professional",
   "Elite",
-  "Duo"
+  "Duo Pro"
 ];
 
 /* ======================
@@ -831,7 +836,21 @@ const appPublic = document.getElementById("appPublic");
 const ruolo = document.getElementById("ruolo");
 const sessione = document.getElementById("sessione");
 const roleLockHint = document.getElementById("roleLockHint");
+const roleBox = document.getElementById("roleBox");
+const sessionBox = document.getElementById("sessionBox");
 
+function lockRoleAndSessionForNonAdmin(){
+  if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
+    ruolo.disabled = true;
+    sessione.disabled = true;
+    if (roleBox) roleBox.classList.add("hide");
+    if (sessionBox) sessionBox.classList.add("hide");
+    roleLockHint.textContent = "Gestito dall’Admin";
+  } else {
+    if (roleBox) roleBox.classList.remove("hide");
+    if (sessionBox) sessionBox.classList.remove("hide");
+  }
+}
 const stateBadge = document.getElementById("stateBadge");
 const stateLine = document.getElementById("stateLine");
 
@@ -891,7 +910,9 @@ const adminLiveCat = document.getElementById("adminLiveCat");
 const adminLiveNow = document.getElementById("adminLiveNow");
 const adminLiveCount = document.getElementById("adminLiveCount");
 const adminLiveBody = document.getElementById("adminLiveBody");
-
+const adminPie = document.getElementById("adminPie");
+const adminBars = document.getElementById("adminBars");
+const adminLine = document.getElementById("adminLine");
 let unsubAdminLive = null;
 let lastStandingsWriteKey = null;
 
@@ -1057,7 +1078,9 @@ toggleThemeBtn.onclick = () => {
 const forcedRole = getUrlRole();
 if (forcedRole){
   ruolo.value = forcedRole;
+  
   // 🔒 Giudici e Pubblico: niente scelta ruolo/sessione (li gestisce l'Admin)
+  
 const roleBox = document.getElementById("roleBox");
 const sessionBox = document.getElementById("sessionBox");
 
@@ -1068,7 +1091,7 @@ function lockRoleAndSessionForNonAdmin(){
     if (roleBox) roleBox.classList.add("hide");
     if (sessionBox) sessionBox.classList.add("hide");
     roleLockHint.textContent = "Gestito dall’Admin";
-  } else {
+  }  lockRoleAndSessionForNonAdmin();else {
     if (roleBox) roleBox.classList.remove("hide");
     if (sessionBox) sessionBox.classList.remove("hide");
   }

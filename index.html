@@ -1108,7 +1108,7 @@ async function computeAndWriteStandings(session, category){
   }, { merge:true });
 }
 
-function renderAdminLiveTable(perfDocs, standingsMap){
+function renderAdminLiveTable(standingsMap){
   // perfDocs: array {startNum, atleta, votedCount, t1,t2,t3, finalAvg}
   // standingsMap: startNum -> position
   const rows = perfDocs.sort((a,b)=>a.startNum-b.startNum).map(p => {

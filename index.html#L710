@@ -707,7 +707,6 @@ const line = [];
     bars.push({ xLabel: String(p.startNum), value: p.finalAvg });
     line.push({ x: p.startNum, y: p.finalAvg });
   }
-});
 
 drawPie(adminPie, [c0,c1,c2,c3]);
 

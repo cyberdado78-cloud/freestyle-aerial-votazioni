@@ -697,7 +697,7 @@ let c0=0,c1=0,c2=0,c3=0;
 const bars = [];
 const line = [];
 
-perfDocs.forEach(p=>{
+
   if (p.votedCount === 0) c0++;
   else if (p.votedCount === 1) c1++;
   else if (p.votedCount === 2) c2++;
@@ -1111,7 +1111,7 @@ async function computeAndWriteStandings(session, category){
 function renderAdminLiveTable(standingsMap){
   // perfDocs: array {startNum, atleta, votedCount, t1,t2,t3, finalAvg}
   // standingsMap: startNum -> position
-  const rows = perfDocs.sort((a,b)=>a.startNum-b.startNum).map(p => {
+  
     const pos = standingsMap?.[p.startNum] || "—";
     const finalTxt = (typeof p.finalAvg === "number") ? fmt1(p.finalAvg) : "—";
     const j1 = (typeof p.t1 === "number") ? fmt1(p.t1) : "—";

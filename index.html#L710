@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Votazioni Live – Freestyle Aerial Competition</title>
-  
+
   <!-- Firebase COMPAT (stabile su mobile) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
@@ -14,54 +14,73 @@
        BRAND COLORS (BIANCO/ROSSO/ORO/NERO)
     ======================= */
     :root{
-      /* BRAND */
-      --brand-black: #0b0b0b;
-      --brand-white: #ffffff;
-      --brand-red:   #c1121f;
-      --brand-gold:  #d4af37;
-
-      /* BACKGROUND */
-      --bg: #ffffff;
+      --bg: #f5f5f7;
+      --bg-dark: #050505;
       --card: #ffffff;
-
-      /* TEXT */
-      --text: #0b0b0b;
-      --muted: #6b6b6b;
-
-      /* LINES / DIVIDERS */
-      --line: #e6e6e6;
-
-      /* ACTIONS */
-      --accent: var(--brand-red);
-      --accent-2: var(--brand-gold);
-
-      /* FEEDBACK */
-      --okbg: #f6fff9;
-      --ok: #1b5e20;
-
-      --badbg: #fff1f1;
-      --bad: #8b0000;
-
-      --warnbg: #fff8e1;
-      --warn: #8a6d1d;
-
-      /* UI */
-      --radius: 16px;
-      --shadow: 0 12px 30px rgba(0,0,0,.08);
+      --card-dark: #101010;
+      --text: #111111;
+      --muted: #666666;
+      --brand-red: #c1121f;
+      --brand-gold: #d4af37;
+      --brand-black: #141414;
+      --brand-white: #ffffff;
+      --line: rgba(0,0,0,0.08);
+      --accent: #c1121f;
     }
 
     *{ box-sizing:border-box; }
-    body{
-      margin:14px;
-      background:var(--bg);
-      color:var(--text);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      line-height:1.35;
-    }
-    a{ color:var(--accent); text-decoration:none; }
-    a:hover{ text-decoration:underline; }
 
-    /* Top bar */
+    body{
+      margin:0;
+      padding:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #ffffff 0, #f5f5f7 45%, #e5e5ea 100%);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .appWrap{
+      max-width:1120px;
+      margin:0 auto;
+      padding:16px;
+    }
+
+    h1,h2,h3{
+      margin:0 0 8px;
+      font-weight:700;
+      letter-spacing:0.03em;
+      text-transform:uppercase;
+    }
+
+    p{ margin:4px 0; }
+
+    /* LAYOUT */
+    .row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .col{
+      flex:1 1 0;
+      min-width:200px;
+    }
+
+    /* CARD */
+    .card{
+      background:var(--card);
+      border-radius:16px;
+      padding:16px;
+      box-shadow:
+        0 14px 38px rgba(0,0,0,0.08),
+        0 3px 8px rgba(0,0,0,0.08);
+      border:1px solid rgba(255,255,255,0.9);
+    }
+
+    .card.center{
+      text-align:center;
+    }
+
+    /* TOPBAR */
     .topbar{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       margin-bottom:12px;
@@ -75,596 +94,705 @@
     }
     .brandTitle{ display:flex; flex-direction:column; }
     .brandTitle b{ letter-spacing:.2px; }
-    .brandTitle span{ color:var(--muted); font-size:12px; margin-top:2px; }
 
-    .card{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:14px;
-      margin:12px 0;
-      box-shadow:var(--shadow);
-    }
-
-    h2{
-      font-size:16px;
-      margin:0 0 10px;
-      font-weight: 800;
-      letter-spacing: .4px;
-      text-transform: uppercase;
-    }
-
-    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
-    .col{ min-width:220px; flex:1; }
-
-    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
-    input,select,textarea{
-      width:100%;
-      padding:11px 12px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      background:#fff;
-      color:var(--text);
-      outline:none;
-    }
-    input:focus,select:focus,textarea:focus{
-      border-color:rgba(193,18,31,.35);
-      box-shadow:0 0 0 4px rgba(193,18,31,.12);
-    }
-    input[disabled],select[disabled],textarea[disabled]{
-      opacity:.6; background:#fafafa; cursor:not-allowed;
-    }
-    input[type="number"]{ width:140px; text-align:center; font-variant-numeric:tabular-nums; font-size:18px; font-weight:800; }
-    textarea{ min-height:110px; resize:vertical; }
-
-    button{
-      padding:10px 12px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      background:#fff;
-      color:var(--text);
-      cursor:pointer;
-      white-space:nowrap;
-    }
-
-    button.primary{
-      background: linear-gradient(135deg, var(--brand-red), #a50f1a);
-      border-color: rgba(193,18,31,.25);
-      color:#fff;
-      box-shadow: 0 8px 18px rgba(193,18,31,.35);
-    }
-    button.primary:hover{
-      transform: translateY(-1px);
-      box-shadow: 0 12px 26px rgba(193,18,31,.45);
-    }
-    button:hover{ background:#fafafa; }
-    button:disabled{ opacity:.55; cursor:not-allowed; }
-
-    .hint{ font-size:12px; color:var(--muted); }
-    .hide{ display:none !important; }
-
-    .badge{
+    .envBadge{
+      font-size:11px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,0.1);
+      background:rgba(255,255,255,0.9);
       display:inline-flex;
       align-items:center;
       gap:6px;
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      border:1px solid transparent;
     }
-    .badge.ok{ background:var(--okbg); color:var(--ok); border-color:rgba(27,94,32,.18); }
-    .badge.bad{ background:var(--badbg); color:var(--bad); border-color:rgba(139,0,0,.18); }
-    .badge.warn{ background:var(--warnbg); color:var(--warn); border-color:rgba(138,109,29,.18); }
 
-    /* Gold premium badge */
+    /* BADGE */
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,0.08);
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+      background:rgba(255,255,255,0.9);
+      color:var(--muted);
+    }
+
     .badge.accent{
-      background: linear-gradient(135deg, var(--brand-gold), #b8962e);
-      color:#1a1a1a;
-      font-weight:700;
-      border-color: rgba(212,175,55,.18);
-      box-shadow: 0 4px 10px rgba(212,175,55,.35);
+      background: radial-gradient(circle at top left, #ffffff 0, #c1121f 60%);
+      color:#ffffff;
+      border-color:rgba(255,255,255,0.3);
+      text-shadow:0 1px 2px rgba(0,0,0,0.35);
+    }
+
+    .badge.state-ok{
+      background:linear-gradient(135deg, #14532d, #22c55e);
+      color:#ecfdf5;
+      border-color:rgba(16,94,57,0.7);
+    }
+    .badge.state-warn{
+      background:linear-gradient(135deg, #92400e, #f59e0b);
+      color:#fffbeb;
+      border-color:rgba(146,64,14,0.7);
+    }
+    .badge.state-bad{
+      background:linear-gradient(135deg, #7f1d1d, #ef4444);
+      color:#fef2f2;
+      border-color:rgba(127,29,29,0.7);
+    }
+
+    /* INPUTS */
+    label{
+      display:block;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.12em;
+      font-weight:600;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+    input,select,textarea{
+      width:100%;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      font-size:14px;
+      font-family:inherit;
+      background:rgba(255,255,255,0.9);
+      outline:none;
+      transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    textarea{
+      border-radius:12px;
+      min-height:80px;
+      resize:vertical;
+    }
+    input:focus,select:focus,textarea:focus{
+      border-color:var(--brand-red);
+      box-shadow:0 0 0 1px rgba(193,18,31,0.4);
+      background:#ffffff;
+    }
+
+    /* BUTTONS */
+    button{
+      border-radius:999px;
+      padding:8px 16px;
+      border:none;
+      cursor:pointer;
+      font-size:14px;
+      font-weight:600;
+      letter-spacing:0.06em;
+      text-transform:uppercase;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      background:#111111;
+      color:#ffffff;
+      box-shadow:0 10px 24px rgba(0,0,0,0.18);
+      transition:transform .12s ease, box-shadow .12s ease, background .12s ease, opacity .12s ease;
+    }
+    button.small{
+      font-size:11px;
+      padding:5px 10px;
+    }
+    button.primary{
+      background: radial-gradient(circle at top left, #ffffff 0, #c1121f 40%, #7f1d1d 100%);
+    }
+    button:hover{
+      transform:translateY(-1px);
+      box-shadow:0 12px 28px rgba(0,0,0,0.22);
+      opacity:0.96;
+    }
+    button:active{
+      transform:translateY(0);
+      box-shadow:0 4px 12px rgba(0,0,0,0.35);
+      opacity:0.9;
+    }
+    button:disabled{
+      opacity:0.45;
+      cursor:not-allowed;
+      box-shadow:none;
+      transform:none;
+    }
+
+    .btnGhost{
+      background:transparent;
+      color:var(--muted);
+      box-shadow:none;
+      border:1px dashed rgba(0,0,0,0.15);
+    }
+
+    .divider{
+      margin:16px 0;
+      height:1px;
+      background:linear-gradient(to right, rgba(0,0,0,0.16), rgba(0,0,0,0.02));
+    }
+
+    .hint{
+      font-size:12px;
+      color:var(--muted);
     }
 
     .msg{
-      margin-top:10px;
-      padding:10px 12px;
       border-radius:12px;
-      border:1px solid var(--line);
-      background:#fff;
-      font-size:12px;
+      padding:10px 12px;
+      font-size:13px;
+      margin-top:8px;
+      border:1px solid transparent;
     }
-    .msg.ok{ background:var(--okbg); border-color:rgba(27,94,32,.20); color:var(--ok); }
-    .msg.bad{ background:var(--badbg); border-color:rgba(139,0,0,.20); color:var(--bad); }
-    .msg.warn{ background:var(--warnbg); border-color:rgba(138,109,29,.20); color:var(--warn); }
+    .msg.ok{
+      background:#ecfdf5;
+      border-color:#4ade80;
+      color:#14532d;
+    }
+    .msg.bad{
+      background:#fef2f2;
+      border-color:#f97373;
+      color:#7f1d1d;
+    }
+    .msg.warn{
+      background:#fffbeb;
+      border-color:#facc15;
+      color:#92400e;
+    }
+
+    .hide{ display:none !important; }
 
     table{
       width:100%;
       border-collapse:collapse;
+      font-size:13px;
+      margin-top:8px;
+      background:#ffffff;
+      border-radius:12px;
       overflow:hidden;
-      border-radius:14px;
-      border:1px solid var(--line);
-      background:#fff;
     }
-    th,td{ border-bottom:1px solid var(--line); padding:10px 10px; vertical-align:middle; }
-    th{ text-align:left; font-size:12px; color:var(--muted); background:#fbfbfd; }
-    .num{ text-align:right; white-space:nowrap; }
+    th,td{
+      padding:6px 8px;
+      border-bottom:1px solid rgba(0,0,0,0.06);
+      text-align:left;
+      white-space:nowrap;
+    }
+    th{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:0.12em;
+      color:var(--muted);
+      background:rgba(0,0,0,0.02);
+    }
+    td.num, th.num{
+      text-align:right;
+      font-variant-numeric:tabular-nums;
+    }
+    tr:nth-child(even) td{
+      background:rgba(0,0,0,0.01);
+    }
 
-    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    @media(max-width:980px){ .grid2{ grid-template-columns:1fr; } body{ margin:10px; } }
+    .pillGroup{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+
+    .pill{
+      padding:3px 9px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,0.12);
+      background:rgba(255,255,255,0.85);
+      font-size:11px;
+    }
 
     .judgeFooter{
       position:sticky;
       bottom:0;
-      margin-top:12px;
-      padding-top:10px;
-      background:linear-gradient(to top, var(--card) 70%, rgba(255,255,255,0));
+      margin:-16px;
+      margin-top:16px;
+      padding:10px 16px;
+      padding-top:12px;
+      background:linear-gradient(to top, #ffffff 70%, rgba(255,255,255,0));
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:10px;
     }
 
-    /* Total badge premium */
-    .judgeFooter .badge.ok{
-      background: linear-gradient(135deg, #ffffff, #fff8e1);
-      color: var(--brand-black);
-      font-size: 14px;
-      border: 1px solid var(--brand-gold);
+    .rangeRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
     }
-    #tot{
-      font-size: 18px;
-      font-weight: 900;
-      color: var(--brand-black);
+    .rangeRow input[type="range"]{
+      flex:1;
     }
 
-    /* Athlete emphasis */
-    #athRO{
-      font-weight: 800;
-      letter-spacing: .3px;
+    input[type="range"]{
+      padding:0;
+      background:transparent;
     }
 
     /* Public */
-    .publicWrap{ max-width:560px; margin:0 auto; }
-    .center{ text-align:center; }
-    .bigScore{
-      font-size:44px;
-      font-weight:900;
-      letter-spacing:.5px;
-      color: var(--brand-red);
-      text-shadow: 0 2px 8px rgba(193,18,31,.35);
+    .publicWrap{
+      max-width:540px;
+      margin:0 auto;
+      padding-top:20px;
     }
-    .range{ width:100%; }
 
-    .videoBox{
-      border:2px solid var(--brand-gold);
-      border-radius:14px;
-      overflow:hidden;
-      background:#000;
-      aspect-ratio: 16 / 9;
-      width:100%;
-      margin-top:10px;
-      box-shadow: 0 10px 24px rgba(0,0,0,.25);
+    .scoreCircle{
+      width:64px;
+      height:64px;
+      border-radius:50%;
+      border:3px solid var(--brand-gold);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      font-weight:700;
+      margin:0 auto;
     }
-    .videoBox iframe{ width:100%; height:100%; border:0; display:block; }
-    .divider{ height:1px; background:var(--line); margin:12px 0; }
 
-    /* Smooth micro transitions */
-    button, .badge, .card{ transition: all .18s ease; }
-
-    /* =========================
-       DARK STAGE MODE (local to device)
-    ========================= */
+    /* Dark stage */
     body.dark{
-      --bg: #0b0b0b;
-      --card: #111111;
-
-      --text: #ffffff;
-      --muted: #b5b5b5;
-
-      --line: #2a2a2a;
-
-      --okbg: #0f2e1a;
-      --ok: #7ddc9a;
-
-      --badbg: #3a0d0d;
-      --bad: #ff6b6b;
-
-      --warnbg: #3a2e0d;
-      --warn: #ffd166;
-
-      --shadow: 0 16px 40px rgba(0,0,0,.6);
+      background:#050505;
+      color:#f4f4f5;
     }
-    body.dark input,
-    body.dark textarea,
-    body.dark select{
-      background:#0f0f0f;
-      color:#ffffff;
-      border-color:#2a2a2a;
+    body.dark .card{
+      background:radial-gradient(circle at top left, #151515 0, #050505 55%, #000000 100%);
+      border-color:rgba(255,255,255,0.04);
+      box-shadow:
+        0 20px 60px rgba(0,0,0,0.9),
+        0 0 0 1px rgba(255,255,255,0.01);
     }
-    body.dark table{ background:#0f0f0f; }
-    body.dark th{ background:#141414; }
+    body.dark .envBadge{
+      background:rgba(10,10,10,0.9);
+      border-color:rgba(255,255,255,0.08);
+      color:#e5e5e5;
+    }
+    body.dark input, body.dark select, body.dark textarea{
+      background:rgba(10,10,10,0.9);
+      border-color:rgba(255,255,255,0.08);
+      color:#e5e5e5;
+    }
+    body.dark input:focus, body.dark select:focus, body.dark textarea:focus{
+      border-color:#d4af37;
+      box-shadow:0 0 0 1px rgba(212,175,55,0.45);
+      background:#050505;
+    }
+    body.dark button{
+      background:#f5f5f5;
+      color:#000000;
+      box-shadow:0 12px 32px rgba(0,0,0,0.9);
+    }
+    body.dark button.primary{
+      background: radial-gradient(circle at top left, #f4f4f5 0, #d4af37 35%, #c1121f 100%);
+      color:#050505;
+    }
+    body.dark table{
+      background:#050505;
+    }
+    body.dark th{
+      background:#111111;
+    }
+    body.dark td{
+      border-bottom-color:rgba(255,255,255,0.06);
+    }
+    body.dark .divider{
+      background:linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.02));
+    }
+    body.dark .msg.ok{
+      background:#052e16;
+      border-color:#22c55e;
+      color:#bbf7d0;
+    }
+    body.dark .msg.bad{
+      background:#450a0a;
+      border-color:#f97373;
+      color:#fecaca;
+    }
+    body.dark .msg.warn{
+      background:#451a03;
+      border-color:#facc15;
+      color:#fed7aa;
+    }
     body.dark .judgeFooter{
-      background:linear-gradient(to top, var(--card) 70%, rgba(17,17,17,0));
+      background:linear-gradient(to top, var(--card-dark) 70%, rgba(0,0,0,0));
     }
     body.dark .judgeFooter .badge.ok{
       background: linear-gradient(135deg, #111111, #3a2e0d);
       color: #ffffff;
       border-color: var(--brand-gold);
     }
- /* Admin sections */
-details.section{
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  background:var(--card);
-  box-shadow:var(--shadow);
-  margin:12px 0;
-}
-details.section > summary{
-  cursor:pointer;
-  padding:12px 14px;
-  font-weight:900;
-  letter-spacing:.35px;
-  text-transform:uppercase;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-}
-details.section > summary::-webkit-details-marker{ display:none; }
-details.section[open] > summary{ border-bottom:1px solid var(--line); }
-.sectionBody{ padding:12px 14px; }
-.kpi{ display:flex; gap:10px; flex-wrap:wrap; }
-.kpi .badge{ font-weight:900; }
-canvas.chart{
-  width:100%;
-  max-width:520px;
-  background:rgba(0,0,0,.02);
-  border:1px solid var(--line);
-  border-radius:14px;
-}
 
+    /* Admin monitor charts */
+    .kpi{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    canvas.chart{
+      width:100%;
+      max-width:520px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:rgba(0,0,0,0.02);
+      display:block;
+    }
+    body.dark canvas.chart{
+      background:#050505;
+      border-color:#333333;
+    }
+
+    @media (max-width:720px){
+      .topbar{ flex-direction:column; align-items:flex-start; }
+    }
+
+    iframe{
+      border-radius:16px;
+      border:none;
+      width:100%;
+      min-height:220px;
+      background:#000;
+    }
   </style>
 </head>
-
 <body>
-
-  <!-- TOP BAR -->
-  <div class="topbar">
-    <div class="brand">
-      <img id="brandLogo" alt="Logo" />
-      <div class="brandTitle">
-        <b id="brandName">Freestyle Aerial Competition</b>
-        <span id="brandSubtitle">Votazioni Live • Giudici + Pubblico</span>
+  <div class="appWrap">
+    <div class="topbar">
+      <div class="brand">
+        <img id="brandLogo" alt="Freestyle Aerial Competition logo" />
+        <div class="brandTitle">
+          <b id="brandName">Freestyle Aerial Competition</b>
+          <span id="brandSubtitle" class="hint">Sistema di votazione live</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="toggleThemeBtn" class="small btnGhost">🌙 Dark Stage</button>
+        <div class="envBadge">
+          <span id="envBadge">Online</span>
+        </div>
       </div>
     </div>
 
-    <div class="row" style="align-items:center; justify-content:flex-end; gap:10px">
-      <button id="toggleTheme" class="badge accent" style="border:0; cursor:pointer">🌙 Dark Stage</button>
-      <span class="badge accent" id="envBadge">Online</span>
-    </div>
-  </div>
-
-  <!-- ======================
-       APP MAIN (Admin / Judges)
-  ======================= -->
-  <div id="appMain">
-
-    <div class="card">
+    <div id="appMain">
       <div class="row">
-        <div class="col" id="roleBox" style="min-width:240px; flex:0 0 auto;">
+        <!-- LEFT: CONFIG / ADMIN -->
+        <div class="col" style="min-width:280px; max-width:360px;">
+          <div class="card">
+            <h2>Dispositivo</h2>
+            <p class="hint">Seleziona il ruolo di questo dispositivo e la giornata.</p>
 
-          <label>Ruolo</label>
-          <select id="ruolo">
-            <option value="ADMIN">Admin</option>
-            <option value="J1">Giudice 1</option>
-            <option value="J2">Giudice 2</option>
-            <option value="J3">Giudice 3</option>
-            <option value="PUBLIC">Pubblico</option>
-          </select>
-          <div class="hint" id="roleLockHint"></div>
-        </div>
+            <div class="row">
+              <div class="col">
+                <label>Ruolo</label>
+                <select id="ruolo">
+                  <option value="ADMIN">Admin</option>
+                  <option value="J1">Giudice 1</option>
+                  <option value="J2">Giudice 2</option>
+                  <option value="J3">Giudice 3</option>
+                  <option value="PUBLIC">Pubblico</option>
+                </select>
+                <div class="hint" id="roleLockHint"></div>
+              </div>
 
-        <div class="col" id="sessionBox" style="min-width:280px; flex:0 0 auto;">
-
-
-          <label>Giornata / Sessione</label>
-          <select id="sessione">
-            <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
-            <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
-          </select>
-          <div class="hint">L’Admin decide quale giornata avviare. L’altra resta spenta.</div>
-        </div>
-
-        <div class="col">
-          <label>Stato gara</label>
-          <div class="row" style="align-items:center">
-            <span class="badge warn" id="stateBadge">In attesa</span>
-            <span class="hint" id="stateLine">—</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid2">
-
-      <!-- JUDGE PANEL -->
-      <div class="card" id="judgePanel">
-        <h2>Schermata Giudice</h2>
-
-        <div class="row" style="justify-content:space-between; align-items:center">
-          <div class="hint"><b>Giudice:</b> <span id="who">—</span></div>
-          <div class="row" style="gap:8px; align-items:center">
-            <span id="freezeBadge" class="badge warn hide">BLOCCO VOTAZIONI</span>
-            <span id="submittedBadge" class="badge ok hide">INVIATO</span>
-          </div>
-        </div>
-
-        <div id="judgeMsg" class="msg hide"></div>
-
-        <div class="divider"></div>
-        <div class="row">
-          <div class="col">
-            <label>Categoria in uscita</label>
-            <input id="catRO" disabled>
-          </div>
-          <div style="min-width:140px">
-            <label>Start</label>
-            <input id="startRO" disabled>
-          </div>
-          <div class="col">
-            <label>Atleta</label>
-            <input id="athRO" disabled>
-          </div>
-        </div>
-
-        <div id="videoWrap" class="hide">
-          <label style="margin-top:10px">Video entry (riferimento)</label>
-          <div class="videoBox" id="videoBox"></div>
-          <div class="hint" id="videoHint" style="margin-top:6px"></div>
-        </div>
-
-        <div class="divider"></div>
-
-        <table>
-          <thead><tr><th>Criterio</th><th class="num">Voto (0–10)</th></tr></thead>
-          <tbody id="critBody"></tbody>
-          <tfoot>
-            <tr>
-              <th>Penalità (sottratte)</th>
-              <td class="num"><input id="pen" type="number" step="0.1" min="0" max="100" value="0.0"></td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <label style="margin-top:12px">Nota penalità (obbligatoria se penalità &gt; 0)</label>
-        <textarea id="note" placeholder="Scrivi la giustificazione..."></textarea>
-
-        <div class="judgeFooter">
-          <span class="badge ok">Totale: <b id="tot">0.0</b></span>
-          <span class="badge warn">Sync: <b id="sync">—</b></span>
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <button id="btnSend" class="primary">Invia (definitivo)</button>
-          <button id="btnClear">Reset</button>
-        </div>
-      </div>
-
-      <!-- ADMIN PANEL -->
-      <div class="card" id="adminPanel">
-        <h2>Admin</h2>
-
-        <div id="pinBox">
-          <label>PIN Admin</label>
-          <div class="row">
-            <input id="pin" type="password" inputmode="numeric" placeholder="2478">
-            <button id="btnPin" class="primary">Sblocca</button>
-          </div>
-          <div class="hint" id="pinMsg"></div>
-        </div>
-
-        <div id="adminBody" class="hide">
-<details class="section" open>
-  <summary>Regia giornata <span class="badge accent">LIVE</span></summary>
-  <div class="sectionBody">
-
-          <div class="row">
-            <button id="btnStartDay" class="primary">Avvia giornata</button>
-            <button id="btnStopDay">Ferma giornata</button>
-            <button id="btnFreeze">Blocca votazioni</button>
-            <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
-         </div>
-</details>  </div>
-
-          <div class="msg warn" style="margin-top:10px">
-            L’Admin attiva <b>categoria per categoria</b> nell’ordine prestabilito. Senza attivazione: giudici e pubblico non votano.
-          </div>
-
-          <div class="divider"></div>
-          <div class="row">
-            <div class="col">
-              <label>Categoria da attivare (ordine prestabilito)</label>
-              <select id="adminCategory"></select>
-              <div class="hint">Quando attivi una categoria, parte da Start 1 e scorre sugli atleti del roster.</div>
-            </div>
-            <div style="min-width:240px">
-              <label>Azione categoria</label>
-              <div class="row">
-                <button id="btnActivateCategory" class="primary">Attiva categoria</button>
-                <button id="btnCloseCategory">Chiudi categoria</button>
+              <div class="col" style="min-width:220px; flex:0 0 auto;">
+                <label>Giornata / Sessione</label>
+                <select id="sessione">
+                  <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
+                  <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
+                </select>
+                <div class="hint">L’Admin decide quale giornata è attiva e la impone a giudici e pubblico.</div>
               </div>
             </div>
-          </div>
 
-          <div class="row" style="margin-top:10px">
-            <button id="btnPrevAth">← Atleta precedente</button>
-            <button id="btnNextAth" class="primary">Atleta successivo →</button>
-          </div>
+            <div class="divider"></div>
 
-          <div class="divider"></div>
-        <details class="section" open>
-  <summary>Monitor categoria <span class="badge accent-2">Realtime</span></summary>
-  <div class="sectionBody">
-    <div class="kpi">
-      <span class="badge warn" id="adminMonCat">Categoria: —</span>
-      <span class="badge warn" id="adminMonNow">Atleta: —</span>
-      <span class="badge accent" id="adminMonCount">—</span>
-    </div>
-
-    <div class="row" style="margin-top:12px;">
-      <div class="col" style="min-width:260px; flex:0 0 auto;">
-        <label>Progress votazioni (0/3 → 3/3)</label>
-        <canvas id="adminPie" class="chart" width="260" height="260"></canvas>
-      </div>
-      <div class="col">
-        <label>Punteggi finali (solo completi)</label>
-       <canvas id="adminBars" class="chart" width="520" height="240"></canvas>
-<div style="height:10px"></div>
-<canvas id="adminLine" class="chart" width="520" height="240"></canvas>
-      </div>
-    </div>
-
-    <div style="margin-top:12px; overflow:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Start</th>
-            <th>Atleta</th>
-            <th class="num">Voti</th>
-            <th class="num">Finale</th>
-          </tr>
-        </thead>
-        <tbody id="adminMonBody"></tbody>
-      </table>
-    </div>
-  </div>
-</details>
-
-          <h2 style="margin-top:0">Modifiche ultimo minuto</h2>
-
-          <div class="row">
-            <div class="col">
-              <label>Correggi nome atleta corrente</label>
-              <input id="fixAth" placeholder="Nuovo nome atleta">
+            <div class="pillGroup">
+              <span class="pill">Chi sei: <b id="who">–</b></span>
+              <span class="pill">Gara: <span id="stateBadge" class="badge state-warn">In attesa</span></span>
+              <span class="pill" id="freezeBadge" style="display:none;">Votazioni bloccate</span>
+              <span class="pill">Sync: <span id="sync">—</span></span>
             </div>
-            <div style="min-width:200px">
-              <label>&nbsp;</label>
-              <button id="btnFixAth">Applica</button>
+
+            <p class="hint" id="stateLine" style="margin-top:8px;">In attesa attivazione giornata.</p>
+
+            <div id="pinBox" class="hide" style="margin-top:10px;">
+              <label>PIN Admin</label>
+              <div class="row">
+                <div class="col">
+                  <input id="pin" maxlength="10" placeholder="Inserisci PIN per sbloccare Admin">
+                </div>
+                <div style="min-width:120px">
+                  <button id="btnPin" class="small primary">Sblocca</button>
+                </div>
+              </div>
+              <div id="pinMsg" class="msg hide"></div>
             </div>
           </div>
 
-          <div class="row">
-            <div class="col">
-              <label>Correggi link video entry corrente</label>
-              <input id="fixVideo" placeholder="https://youtu.be/...">
-            </div>
-            <div style="min-width:200px">
-              <label>&nbsp;</label>
-              <button id="btnFixVideo">Applica</button>
+          <!-- ADMIN PANEL -->
+          <div id="adminBody" class="hide" style="margin-top:12px;">
+            <div class="card">
+              <h2>Regia Admin</h2>
+              <p class="hint">Gestisci andamento gara, categorie e roster atleti.</p>
+
+              <div class="row">
+                <button id="btnStartDay" class="primary">Avvia giornata</button>
+                <button id="btnStopDay">Ferma giornata</button>
+                <button id="btnFreeze">Blocca votazioni</button>
+                <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
+              </div>
+
+              <div class="msg warn" style="margin-top:10px">
+                L’Admin attiva <b>categoria per categoria</b> nell’ordine prestabilito. Senza attivazione: giudici e pubblico non votano.
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="row">
+                <div class="col">
+                  <label>Categoria da attivare (ordine prestabilito)</label>
+                  <select id="adminCategory"></select>
+                  <div class="card" style="margin-top:10px; padding:10px;">
+                    <div class="hint"><b>Roster categoria selezionata:</b> <span id="adminRosterCount">—</span></div>
+                    <div class="hint" id="adminRosterList" style="margin-top:6px; white-space:pre-wrap;">—</div>
+                  </div>
+
+                  <div class="hint" style="margin-top:6px;">
+                    Quando attivi una categoria, parte da Start 1 e scorre sugli atleti del roster caricato.
+                  </div>
+                </div>
+
+                <div class="col" style="min-width:220px; flex:0 0 auto;">
+                  <label>&nbsp;</label>
+                  <div class="row">
+                    <button id="btnActivateCategory" class="primary">Attiva categoria</button>
+                    <button id="btnCloseCategory">Chiudi categoria</button>
+                  </div>
+
+                  <div class="divider" style="margin:12px 0;"></div>
+
+                  <label>Atleta in uscita</label>
+                  <input id="athRO" readonly placeholder="—">
+                  <div class="row" style="margin-top:10px">
+                    <button id="btnPrevAth">← Atleta precedente</button>
+                    <button id="btnNextAth" class="primary">Atleta successivo →</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+              <h2 style="margin-top:0">Modifiche ultimo minuto</h2>
+
+              <div class="row">
+                <div class="col">
+                  <label>Correggi nome atleta corrente</label>
+                  <input id="fixAth" placeholder="Nuovo nome atleta">
+                </div>
+                <div style="min-width:200px">
+                  <label>&nbsp;</label>
+                  <button id="btnFixAth">Applica</button>
+                </div>
+              </div>
+
+              <div class="row" style="margin-top:8px;">
+                <div class="col">
+                  <label>Correggi link video entry corrente</label>
+                  <input id="fixVideo" placeholder="https://youtu.be/...">
+                </div>
+                <div style="min-width:200px">
+                  <label>&nbsp;</label>
+                  <button id="btnFixVideo">Applica</button>
+                </div>
+              </div>
+
+              <!-- MONITOR CATEGORIA LIVE -->
+              <div class="divider"></div>
+              <h2 style="margin-top:0">Monitor categoria live</h2>
+
+              <div class="card" style="padding:10px; margin-bottom:10px;">
+                <div class="row" style="align-items:center; justify-content:space-between;">
+                  <div class="kpi">
+                    <span class="badge" id="adminMonCat">Categoria: —</span>
+                    <span class="badge" id="adminMonNow">Atleta: —</span>
+                  </div>
+                  <span class="badge accent" id="adminMonCount">—</span>
+                </div>
+
+                <div class="row" style="margin-top:12px; flex-wrap:wrap;">
+                  <div class="col" style="min-width:260px; flex:0 0 auto;">
+                    <label>Progress votazioni (0/3 → 3/3)</label>
+                    <canvas id="adminPie" class="chart" width="260" height="260"></canvas>
+                  </div>
+                  <div class="col">
+                    <label>Punteggi finali (completi)</label>
+                    <canvas id="adminBars" class="chart" width="480" height="220"></canvas>
+                    <div style="height:8px"></div>
+                    <canvas id="adminLine" class="chart" width="480" height="220"></canvas>
+                  </div>
+                </div>
+
+                <div style="margin-top:12px; overflow:auto;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Start</th>
+                        <th>Atleta</th>
+                        <th class="num">Voti</th>
+                        <th class="num">Finale</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminMonBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+              <h2 style="margin-top:0">Gestione roster atleti</h2>
+
+              <div class="row">
+                <div class="col">
+                  <label>Giornata / Sessione</label>
+                  <select id="rosterSession">
+                    <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
+                    <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label>Categoria</label>
+                  <select id="rosterCategory"></select>
+                </div>
+              </div>
+
+              <div class="hint" style="margin-top:8px">
+                Inserisci un atleta per riga. Puoi aggiungere opzionalmente il link al video entry YouTube separato da <code>|</code>.
+                <br>Es: <code>Nome Atleta | https://youtu.be/...</code>
+              </div>
+
+              <textarea id="rosterText" style="margin-top:8px;" placeholder="Atleta 1 | https://youtu.be/...
+Atleta 2
+Atleta 3 | https://youtu.be/..."></textarea>
+
+              <div class="row" style="margin-top:10px">
+                <button id="btnRosterLoad">Ricarica roster</button>
+                <button id="btnRosterSave" class="primary">Salva roster</button>
+                <button id="btnRosterClear">Svuota</button>
+              </div>
+
+              <div class="hint" id="rosterInfo" style="margin-top:8px">—</div>
+              <div id="adminMsg" class="msg hide"></div>
             </div>
           </div>
+        </div>
 
-          <div class="divider"></div>
-          <div class="divider"></div>
-<h2 style="margin-top:0">Andamento live categoria</h2>
+        <!-- RIGHT: JUDGE / VIDEO / SCHEDA -->
+        <div class="col">
+          <div class="card">
+            <h2>Atleta in gara</h2>
+            <p class="hint">Scheda di gara visibile a giudici e Admin.</p>
 
-<div class="card" style="padding:10px;">
-  <div class="row" style="align-items:center; justify-content:space-between;">
-    <div class="hint">
-      <b>Categoria attiva:</b> <span id="adminLiveCat">—</span>
-      • <b>Atleta corrente:</b> <span id="adminLiveNow">—</span>
-    </div>
-    <span class="badge accent" id="adminLiveCount">—</span>
-  </div>
-
-  <div style="margin-top:10px; overflow:auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>Start</th>
-          <th>Atleta</th>
-          <th class="num">Voti</th>
-          <th class="num">J1</th>
-          <th class="num">J2</th>
-          <th class="num">J3</th>
-          <th class="num">Finale (media)</th>
-          <th class="num">Posizione</th>
-        </tr>
-      </thead>
-      <tbody id="adminLiveBody"></tbody>
-    </table>
-  </div>
-
-  <div class="hint" style="margin-top:8px;">
-    La tabella si aggiorna in tempo reale. La posizione appare quando ci sono risultati completi.
-  </div>
-</div>
-
-          <h2 style="margin-top:0">Gestione roster atleti</h2>
- </div>
-</details>
-          <div class="row">
-            <div class="col">
-              <label>Giornata / Sessione</label>
-              <select id="rosterSession">
-                <option value="2026-04-18_CERCHIO">18 Aprile 2026 – Cerchio</option>
-                <option value="2026-04-19_TESSUTI">19 Aprile 2026 – Tessuti</option>
-              </select>
+            <div class="row">
+              <div class="col">
+                <label>Categoria</label>
+                <input id="catRO" readonly placeholder="—">
+              </div>
+              <div style="min-width:120px">
+                <label>Start</label>
+                <input id="startRO" readonly placeholder="—">
+              </div>
             </div>
-            <div class="col">
-              <label>Categoria</label>
-              <select id="rosterCategory"></select>
+
+            <div class="row" style="margin-top:6px;">
+              <div class="col">
+                <label>Nome atleta</label>
+                <input id="athRO" readonly placeholder="—">
+              </div>
             </div>
+
+            <div id="videoWrap" style="margin-top:10px;">
+              <div id="videoHint" class="hint">Quando l’Admin collega il video entry YouTube, apparirà qui.</div>
+              <div id="videoBox" class="hide"></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <h2>Valutazione giudice</h2>
+            <p class="hint">
+              Compila solo se sei un giudice. Ogni criterio da 0 a 10, penalità da 0 a 100. La penalità richiede <b>nota obbligatoria</b>.
+            </p>
+
+            <div id="critBody"></div>
+
+            <div class="row" style="margin-top:8px;">
+              <div class="col" style="max-width:220px;">
+                <label>Penalità (0–100)</label>
+                <input id="pen" type="number" value="0" min="0" max="100" step="0.1">
+              </div>
+              <div class="col">
+                <label>Nota (obbligatoria se penalità > 0)</label>
+                <textarea id="note" placeholder="Motivazione penalità o nota tecnica"></textarea>
+              </div>
+            </div>
+
+            <div class="judgeFooter">
+              <div>
+                <span class="badge">Totale (dopo penalità)</span>
+                <span class="badge accent" style="font-size:20px; padding:6px 14px;" id="tot">0.0</span>
+              </div>
+              <div class="row" style="gap:6px; align-items:center;">
+                <span class="badge" id="submittedBadge" style="display:none;">Inviato</span>
+                <button id="btnClear" class="btnGhost small">Reset scheda</button>
+                <button id="btnSend" class="primary">Invia voti</button>
+              </div>
+            </div>
+
+            <div id="judgeMsg" class="msg hide"></div>
           </div>
-
-          <label style="margin-top:10px">
-            Atleti (una riga = uno start). Facoltativo: “Nome | link video”
-          </label>
-          <textarea id="rosterText" placeholder="Esempio:
-Giulia Rossi | https://youtu.be/xxxx
-Martina Bianchi
-Elena Verdi | https://www.youtube.com/watch?v=yyyy"></textarea>
-
-          <div class="row" style="margin-top:10px">
-            <button id="btnRosterLoad">Ricarica roster</button>
-            <button id="btnRosterSave" class="primary">Salva roster</button>
-            <button id="btnRosterClear">Svuota</button>
-          </div>
-
-          <div class="hint" id="rosterInfo" style="margin-top:8px">—</div>
-          <div id="adminMsg" class="msg hide"></div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ======================
-       PUBLIC
-  ======================= -->
-  <div id="appPublic" class="hide">
-    <div class="publicWrap">
-      <div class="card center">
-        <div class="brand" style="justify-content:center; margin-bottom:8px">
-          <img id="brandLogo2" alt="Logo" style="height:38px" />
-        </div>
+    <!-- ======================
+         PUBLIC
+    ======================= -->
+    <div id="appPublic" class="hide">
+      <div class="publicWrap">
+        <div class="card center">
+          <div class="brand" style="justify-content:center; margin-bottom:8px">
+            <img id="brandLogo2" alt="Logo" style="height:38px" />
+          </div>
 
-        <div class="badge accent" style="justify-content:center">Premio del Pubblico</div>
-        <div class="hint" style="margin-top:10px">Dai il tuo voto agli atleti in gara</div>
+          <div class="badge accent" style="justify-content:center">Premio del Pubblico</div>
+          <div class="hint" style="margin-top:10px">Dai il tuo voto agli atleti in gara</div>
 
-        <div style="margin-top:14px; font-size:18px; font-weight:900" id="pubAthlete">—</div>
-        <div class="hint" style="margin-top:6px" id="pubMeta">In attesa attivazione…</div>
+          <div style="margin-top:14px; font-size:18px; font-weight:900" id="pubAthlete">—</div>
+          <div class="hint" style="margin-top:6px" id="pubMeta">In attesa attivazione…</div>
 
-        <div style="margin-top:16px">
-          <div class="bigScore" id="pubValue">7</div>
-          <div class="hint">1 = non mi è piaciuto • 10 = strabiliante</div>
-          <input class="range" id="pubSlider" type="range" min="1" max="10" step="1" value="7">
-        </div>
+          <div style="margin-top:16px">
+            <div class="scoreCircle">
+              <span id="pubValue">5</span>
+            </div>
+            <div class="rangeRow" style="margin-top:10px;">
+              <span style="font-size:11px;">1</span>
+              <input id="pubSlider" type="range" min="1" max="10" step="1" value="5">
+              <span style="font-size:11px;">10</span>
+            </div>
+          </div>
 
-        <div class="row" style="justify-content:center; margin-top:14px">
-          <button id="pubVoteBtn" class="primary" disabled style="background:linear-gradient(135deg,var(--brand-gold),#b8962e); color:#1a1a1a; font-weight:800; border-color:rgba(212,175,55,.25);">
-            Vota
-          </button>
-        </div>
+          <div style="margin-top:16px;">
+            <button id="pubVoteBtn" class="primary">Invia voto</button>
+          </div>
 
-        <div id="pubMsg" class="msg hide"></div>
+          <div id="pubMsg" class="msg hide"></div>
 
-        <div class="hint" style="margin-top:12px">
-          Un solo voto per atleta su questo dispositivo.
+          <div class="hint" style="margin-top:12px">
+            Un solo voto per atleta su questo dispositivo.
+          </div>
         </div>
       </div>
     </div>
@@ -686,306 +814,26 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-  // ===============================
-// ADMIN MONITOR – CANVAS REFERENCES
-// ===============================
-const adminPie = document.getElementById("adminPie");
-const adminBars = document.getElementById("adminBars");
-const adminLine = document.getElementById("adminLine");
-// ====== grafici: conteggi e punteggi ======
-let c0=0,c1=0,c2=0,c3=0;
-const bars = [];
-const line = [];
-
-
-  if (p.votedCount === 0) c0++;
-  else if (p.votedCount === 1) c1++;
-  else if (p.votedCount === 2) c2++;
-  else c3++;
-
-  if (typeof p.finalAvg === "number"){
-    bars.push({ xLabel: String(p.startNum), value: p.finalAvg });
-    line.push({ x: p.startNum, y: p.finalAvg });
-  }
-
-drawPie(adminPie, [c0,c1,c2,c3]);
-
-bars.sort((a,b)=>Number(a.xLabel)-Number(b.xLabel));
-line.sort((a,b)=>a.x-b.x);
-
-drawBars(adminBars, bars);
-drawLine(adminLine, line);
-
-function ctx2d(canvas){
-  if (!canvas) return null;
-  const c = canvas.getContext("2d");
-  c.clearRect(0,0,canvas.width,canvas.height);
-  return c;
-}
-
-function drawPie(canvas, counts){
-  const c = ctx2d(canvas);
-  if (!c) return;
-
-  const total = counts.reduce((a,b)=>a+b,0) || 1;
-  const w = canvas.width, h = canvas.height;
-  const cx = w/2, cy = h/2;
-  const r = Math.min(w,h)*0.38;
-
-  const colors = ["#6b6b6b", "#c1121f", "#d4af37", "#1b5e20"]; // 0/3,1/3,2/3,3/3
-  const labels = ["0/3","1/3","2/3","3/3"];
-
-  let a0 = -Math.PI/2;
-  for (let i=0;i<4;i++){
-    const frac = counts[i]/total;
-    const a1 = a0 + frac*2*Math.PI;
-    c.beginPath();
-    c.moveTo(cx,cy);
-    c.arc(cx,cy,r,a0,a1);
-    c.closePath();
-    c.fillStyle = colors[i];
-    c.fill();
-    a0 = a1;
-  }
-
-  c.font = "12px system-ui";
-  c.fillStyle = "#111";
-  let y = 16;
-  for (let i=0;i<4;i++){
-    c.fillStyle = colors[i];
-    c.fillRect(10, y-10, 10, 10);
-    c.fillStyle = "#111";
-    c.fillText(`${labels[i]}: ${counts[i]}`, 28, y);
-    y += 18;
-  }
-}
-
-function drawBars(canvas, items){
-  const c = ctx2d(canvas);
-  if (!c) return;
-
-  const w = canvas.width, h = canvas.height;
-  const pad = 32;
-  const maxV = Math.max(1, ...items.map(it=>it.value));
-  const n = Math.max(1, items.length);
-  const barW = Math.max(8, (w - pad*2) / n * 0.7);
-  const gap = ((w - pad*2) / n) - barW;
-
-  c.strokeStyle = "#2a2a2a";
-  c.beginPath();
-  c.moveTo(pad, pad);
-  c.lineTo(pad, h-pad);
-  c.lineTo(w-pad, h-pad);
-  c.stroke();
-
-  c.font = "11px system-ui";
-  c.fillStyle = "#111";
-
-  items.forEach((it, i) => {
-    const x = pad + i*(barW+gap) + gap/2;
-    const bh = (h - pad*2) * (it.value / maxV);
-    const y = (h - pad) - bh;
-
-    c.fillStyle = "#d4af37";
-    c.fillRect(x, y, barW, bh);
-
-    c.fillStyle = "#111";
-    c.fillText(it.xLabel, x, h - 12);
-  });
-
-  c.fillText("Finale (media) - completi", pad, 16);
-}
-
-function drawLine(canvas, items){
-  const c = ctx2d(canvas);
-  if (!c) return;
-
-  const w = canvas.width, h = canvas.height;
-  const pad = 32;
-
-  const xs = items.map(it=>it.x);
-  const ys = items.map(it=>it.y);
-
-  const minX = Math.min(...xs, 1);
-  const maxX = Math.max(...xs, 1);
-  const minY = Math.min(...ys, 0);
-  const maxY = Math.max(...ys, 1);
-
-  const xScale = (val)=> pad + ( (val-minX) / (maxX-minX || 1) ) * (w-pad*2);
-  const yScale = (val)=> (h-pad) - ( (val-minY) / (maxY-minY || 1) ) * (h-pad*2);
-
-  c.strokeStyle = "#2a2a2a";
-  c.beginPath();
-  c.moveTo(pad, pad);
-  c.lineTo(pad, h-pad);
-  c.lineTo(w-pad, h-pad);
-  c.stroke();
-
-  c.strokeStyle = "#c1121f";
-  c.lineWidth = 2;
-  c.beginPath();
-  items.forEach((it,i)=>{
-    const x = xScale(it.x);
-    const y = yScale(it.y);
-    if (i===0) c.moveTo(x,y); else c.lineTo(x,y);
-  });
-  c.stroke();
-
-  c.fillStyle = "#c1121f";
-  items.forEach(it=>{
-    const x = xScale(it.x), y = yScale(it.y);
-    c.beginPath();
-    c.arc(x,y,3,0,2*Math.PI);
-    c.fill();
-  });
-
-  c.font = "11px system-ui";
-  c.fillStyle = "#111";
-  c.fillText("Andamento punteggi (linea) - completi", pad, 16);
-}
 
 /* ======================
-   BRAND (LOGO)
-   - Carica su Netlify in /assets/logo.png
+   BRAND (se vuoi cambiare nome/logo)
 ====================== */
 const BRAND = {
   name: "Freestyle Aerial Competition",
-  subtitle: "Votazioni Live • Giudici + Pubblico",
-  logoUrl: "/assets/logo.png"
+  subtitle: "Sistema votazioni 2026",
+  logoUrl: "https://votazioni26.netlify.app/logo.png" // sostituibile
 };
 
 /* ======================
-   RULES
+   DOM
 ====================== */
-const ADMIN_PIN = "2478";
-const CRITERI = ["Coreografia","Tecnica","Triks","Immagine","Presenza scenica","Performance generale"];
-
-const CATEGORY_ORDER = [
-  "Junior A",
-  "Junior B – Base",
-  "Teen – Base",
-  "Adulti – Base",
-  "Senior - Base",
-  "Junior B – Intermedio",
-  "Teen – Intermedio",
-  "Adulti – Intermedio",
-  "Senior - Intermedio",
-  "Junior B – Avanzato",
-  "Teen – Avanzato",
-  "Adulti – Avanzato",
-  "Senior - Avanzato",
-  "Istruttori / Allenatori",
-  "Professional",
-  "Elite",
-  "Duo Pro"
-];
-
-/* ======================
-   HELPERS
-====================== */
-const clamp = (x,min,max) => Number.isNaN(x) ? min : Math.max(min, Math.min(max, x));
-const fmt1 = (x) => (Math.round(x*10)/10).toFixed(1);
-const sum = (a) => a.reduce((p,c)=>p+c,0);
-const safeId = (s) => String(s||"").trim().replaceAll(" ", "_");
-// ======= CALCOLI PUNTEGGI =======
-function calcJudgeTotal(scores, penalty){
-  const s = Array.isArray(scores) ? scores.map(x=>Number(x)||0) : [];
-  const p = Number(penalty)||0;
-  return sum(s) - p;
-}
-
-function getPerfFinal(perf){
-  const j = perf?.judges || {};
-  const j1 = j.j1, j2 = j.j2, j3 = j.j3;
-
-  const ok1 = j1?.submitted === true;
-  const ok2 = j2?.submitted === true;
-  const ok3 = j3?.submitted === true;
-
-  const t1 = ok1 ? calcJudgeTotal(j1.scores, j1.penalty) : null;
-  const t2 = ok2 ? calcJudgeTotal(j2.scores, j2.penalty) : null;
-  const t3 = ok3 ? calcJudgeTotal(j3.scores, j3.penalty) : null;
-
-  const all = (ok1 && ok2 && ok3);
-  const finalAvg = all ? (t1 + t2 + t3) / 3 : null;
-
-  const votedCount = (ok1?1:0) + (ok2?1:0) + (ok3?1:0);
-
-  return { ok1, ok2, ok3, votedCount, t1, t2, t3, all, finalAvg };
-}
-
-// ======= ID RISULTATI =======
-function resultKey(session, category){
-  return safeId(`${session}__${category}`);
-}
-function resultItemId(session, category, startNum){
-  return safeId(`${session}__${category}__${startNum}`);
-}
-function resultItemRef(session, category, startNum){
-  return db.collection("results")
-    .doc(resultKey(session, category))
-    .collection("items")
-    .doc(resultItemId(session, category, startNum));
-}
-function standingsRef(session, category){
-  return db.collection("standings").doc(resultKey(session, category));
-}
-
-function getUrlRole(){
-  const p = new URLSearchParams(location.search);
-  const r = (p.get("role")||"").toUpperCase().trim();
-  return ["ADMIN","J1","J2","J3","PUBLIC"].includes(r) ? r : null;
-}
-function roleKey(v){
-  return v==="J1"?"j1":(v==="J2"?"j2":(v==="J3"?"j3":null));
-}
-
-function rosterDocId(session, category){ return safeId(`${session}__${category}`); }
-function rosterRef(session, category){ return db.collection("rosters").doc(rosterDocId(session, category)); }
-
-function stateRef(session){ return db.collection("competition_state").doc(session); }
-
-function perfId(session, category, startNum){ return safeId(`${session}__${category}__${startNum}`); }
-function perfRef(session, category, startNum){ return db.collection("performances").doc(perfId(session, category, startNum)); }
-
-// Public device lock
-const LS_DEVICE_ID = "fac_pub_device_v3";
-function getDeviceId(){
-  let id = localStorage.getItem(LS_DEVICE_ID);
-  if (!id){
-    id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
-    localStorage.setItem(LS_DEVICE_ID, id);
-  }
-  return id;
-}
-function localVotedKey(perfIdStr){ return `fac_voted_${perfIdStr}`; }
-function voteDocRef(perfIdStr){
-  return db.collection("public_votes").doc(`${perfIdStr}__${getDeviceId()}`);
-}
-
-// Video: YouTube embed
-function toYouTubeEmbed(url){
-  if (!url) return null;
-  const u = String(url).trim();
-  let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  m = u.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  return null;
-}
-
-/* ======================
-   UI REFS
-====================== */
-const brandLogo = document.getElementById("brandLogo");
-const brandLogo2 = document.getElementById("brandLogo2");
 const brandName = document.getElementById("brandName");
 const brandSubtitle = document.getElementById("brandSubtitle");
-
-const toggleThemeBtn = document.getElementById("toggleTheme");
+const brandLogo = document.getElementById("brandLogo");
+const brandLogo2 = document.getElementById("brandLogo2");
 const envBadge = document.getElementById("envBadge");
+
+const toggleThemeBtn = document.getElementById("toggleThemeBtn");
 
 const appMain = document.getElementById("appMain");
 const appPublic = document.getElementById("appPublic");
@@ -993,21 +841,7 @@ const appPublic = document.getElementById("appPublic");
 const ruolo = document.getElementById("ruolo");
 const sessione = document.getElementById("sessione");
 const roleLockHint = document.getElementById("roleLockHint");
-const roleBox = document.getElementById("roleBox");
-const sessionBox = document.getElementById("sessionBox");
 
-function lockRoleAndSessionForNonAdmin(){
-  if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
-    ruolo.disabled = true;
-    sessione.disabled = true;
-    if (roleBox) roleBox.classList.add("hide");
-    if (sessionBox) sessionBox.classList.add("hide");
-    roleLockHint.textContent = "Gestito dall’Admin";
-  } else {
-    if (roleBox) roleBox.classList.remove("hide");
-    if (sessionBox) sessionBox.classList.remove("hide");
-  }
-}
 const stateBadge = document.getElementById("stateBadge");
 const stateLine = document.getElementById("stateLine");
 
@@ -1036,6 +870,7 @@ const pinBox = document.getElementById("pinBox");
 const pin = document.getElementById("pin");
 const btnPin = document.getElementById("btnPin");
 const pinMsg = document.getElementById("pinMsg");
+
 const adminBody = document.getElementById("adminBody");
 const adminMsg = document.getElementById("adminMsg");
 
@@ -1045,6 +880,8 @@ const btnFreeze = document.getElementById("btnFreeze");
 const btnUnfreeze = document.getElementById("btnUnfreeze");
 
 const adminCategory = document.getElementById("adminCategory");
+const adminRosterCount = document.getElementById("adminRosterCount");
+const adminRosterList = document.getElementById("adminRosterList");
 const btnActivateCategory = document.getElementById("btnActivateCategory");
 const btnCloseCategory = document.getElementById("btnCloseCategory");
 const btnPrevAth = document.getElementById("btnPrevAth");
@@ -1055,6 +892,14 @@ const fixVideo = document.getElementById("fixVideo");
 const btnFixAth = document.getElementById("btnFixAth");
 const btnFixVideo = document.getElementById("btnFixVideo");
 
+const adminMonCat = document.getElementById("adminMonCat");
+const adminMonNow = document.getElementById("adminMonNow");
+const adminMonCount = document.getElementById("adminMonCount");
+const adminMonBody = document.getElementById("adminMonBody");
+const adminPie = document.getElementById("adminPie");
+const adminBars = document.getElementById("adminBars");
+const adminLine = document.getElementById("adminLine");
+
 const rosterSession = document.getElementById("rosterSession");
 const rosterCategory = document.getElementById("rosterCategory");
 const rosterText = document.getElementById("rosterText");
@@ -1062,160 +907,7 @@ const btnRosterLoad = document.getElementById("btnRosterLoad");
 const btnRosterSave = document.getElementById("btnRosterSave");
 const btnRosterClear = document.getElementById("btnRosterClear");
 const rosterInfo = document.getElementById("rosterInfo");
-// ======= ADMIN LIVE UI =======
-const adminLiveCat = document.getElementById("adminLiveCat");
-const adminLiveNow = document.getElementById("adminLiveNow");
-const adminLiveCount = document.getElementById("adminLiveCount");
-const adminLiveBody = document.getElementById("adminLiveBody");
 
-let unsubAdminLive = null;
-let lastStandingsWriteKey = null;
-
-function clearAdminLive(){
-  if (adminLiveCat) adminLiveCat.textContent = "—";
-  if (adminLiveNow) adminLiveNow.textContent = "—";
-  if (adminLiveCount) adminLiveCount.textContent = "—";
-  if (adminLiveBody) adminLiveBody.innerHTML = "";
-}
-
-async function computeAndWriteStandings(session, category){
-  // legge tutti i risultati completi e scrive la classifica con posizioni
-  const snap = await db.collection("results")
-    .doc(resultKey(session, category))
-    .collection("items")
-    .get();
-
-  const items = [];
-  snap.forEach(doc => {
-    const d = doc.data() || {};
-    if (typeof d.finalAvg === "number") items.push(d);
-  });
-
-  items.sort((a,b) => (b.finalAvg - a.finalAvg));
-
-  // assegna posizione
-  const ranked = items.map((x,i) => ({
-    ...x,
-    position: i + 1
-  }));
-
-  await standingsRef(session, category).set({
-    session,
-    category,
-    updatedAt: Date.now(),
-    items: ranked
-  }, { merge:true });
-}
-
-function renderAdminLiveTable(standingsMap){
-  // perfDocs: array {startNum, atleta, votedCount, t1,t2,t3, finalAvg}
-  // standingsMap: startNum -> position
-  
-    const pos = standingsMap?.[p.startNum] || "—";
-    const finalTxt = (typeof p.finalAvg === "number") ? fmt1(p.finalAvg) : "—";
-    const j1 = (typeof p.t1 === "number") ? fmt1(p.t1) : "—";
-    const j2 = (typeof p.t2 === "number") ? fmt1(p.t2) : "—";
-    const j3 = (typeof p.t3 === "number") ? fmt1(p.t3) : "—";
-    const votes = `${p.votedCount}/3`;
-
-    return `
-      <tr>
-        <td>${p.startNum}</td>
-        <td>${(p.atleta||"—")}</td>
-        <td class="num">${votes}</td>
-        <td class="num">${j1}</td>
-        <td class="num">${j2}</td>
-        <td class="num">${j3}</td>
-        <td class="num"><b>${finalTxt}</b></td>
-        <td class="num">${pos}</td>
-      </tr>
-    `;
-  }).join("");
-
-  adminLiveBody.innerHTML = rows || `<tr><td colspan="8" class="hint">Nessun dato.</td></tr>`;
-}
-
-async function loadStandingsMap(session, category){
-  const snap = await standingsRef(session, category).get();
-  if (!snap.exists) return {};
-  const d = snap.data() || {};
-  const items = Array.isArray(d.items) ? d.items : [];
-  const map = {};
-  items.forEach(it => {
-    const st = parseInt(it.start,10);
-    if (!Number.isNaN(st)) map[st] = it.position;
-  });
-  return map;
-}
-
-function listenAdminLive(){
-  if (unsubAdminLive){ unsubAdminLive(); unsubAdminLive = null; }
-  clearAdminLive();
-
-  if (!isAdmin() || !isAdminUnlocked()) return;
-  if (!currentState || currentState.active !== true || currentState.categoryActive !== true) return;
-
-  const sess = sessione.value;
-  const cat = currentState.categoryName;
-
-  adminLiveCat.textContent = cat || "—";
-  adminLiveNow.textContent = `Start ${currentState.start || "—"} • ${currentState.athleteName || "—"}`;
-
-  // Query live delle performances della categoria
-  const q = db.collection("performances")
-    .where("sessione", "==", sess)
-    .where("categoria", "==", cat);
-
-  unsubAdminLive = q.onSnapshot(async (qs) => {
-    const perfDocs = [];
-    qs.forEach(doc => {
-      const d = doc.data() || {};
-      const startNum = parseInt(d.start, 10);
-      if (Number.isNaN(startNum)) return;
-
-      const f = getPerfFinal(d);
-
-      perfDocs.push({
-        startNum,
-        atleta: d.atleta || "",
-        votedCount: f.votedCount,
-        t1: f.t1, t2: f.t2, t3: f.t3,
-        finalAvg: f.finalAvg
-      });
-    });
-
-    adminLiveCount.textContent = performance`;
-// ====== grafici (0/3–3/3) + barre + linea ======
-let c0=0,c1=0,c2=0,c3=0;
-const bars = [];
-const line = [];
-
-
-  if (p.votedCount === 0) c0++;
-  else if (p.votedCount === 1) c1++;
-  else if (p.votedCount === 2) c2++;
-  else if (p.votedCount === 3) c3++;
-
-  if (typeof p.finalAvg === "number"){
-    bars.push({ xLabel: String(p.startNum), value: p.finalAvg });
-    line.push({ x: p.startNum, y: p.finalAvg });
-  }
-});
-
-// ordina per start
-bars.sort((a,b)=>Number(a.xLabel)-Number(b.xLabel));
-line.sort((a,b)=>a.x-b.x);
-
-// disegna
-drawPie(adminPie, [c0,c1,c2,c3]);
-drawBars(adminBars, bars);
-drawLine(adminLine, line);
-    const standingsMap = await loadStandingsMap(sess, cat);
-    renderAdminLiveTable(standingsMap);
-  });
-}
-
-// Public
 const pubAthlete = document.getElementById("pubAthlete");
 const pubMeta = document.getElementById("pubMeta");
 const pubSlider = document.getElementById("pubSlider");
@@ -1230,6 +922,241 @@ brandName.textContent = BRAND.name;
 brandSubtitle.textContent = BRAND.subtitle;
 brandLogo.src = BRAND.logoUrl;
 brandLogo2.src = BRAND.logoUrl;
+
+/* ======================
+   UTILS
+====================== */
+const clamp = (x, min, max) => Number.isNaN(x) ? min : Math.max(min, Math.min(max, x));
+const fmt1 = (x) => (Math.round(x*10)/10).toFixed(1);
+const sum = (a) => a.reduce((p,c)=>p+c,0);
+const safeId = (s) => String(s||"").trim().replaceAll(" ", "_");
+
+function calcJudgeTotal(j){
+  if (!j || !Array.isArray(j.scores)) return null;
+  const s = j.scores.map(x => clamp(parseFloat(x)||0,0,10));
+  const penV = clamp(parseFloat(j.penalty||0),0,100);
+  return sum(s) - penV;
+}
+function getPerfFinal(perf){
+  const j = perf && perf.judges ? perf.judges : {};
+  const totals = [];
+  const j1 = j.j1, j2 = j.j2, j3 = j.j3;
+
+  const t1 = calcJudgeTotal(j1);
+  const t2 = calcJudgeTotal(j2);
+  const t3 = calcJudgeTotal(j3);
+
+  if (j1 && j1.submitted && t1 != null) totals.push(t1);
+  if (j2 && j2.submitted && t2 != null) totals.push(t2);
+  if (j3 && j3.submitted && t3 != null) totals.push(t3);
+
+  const votedCount = totals.length;
+  const finalAvg = votedCount === 3 ? (sum(totals) / 3) : null;
+
+  return {
+    votedCount,
+    t1,
+    t2,
+    t3,
+    finalAvg
+  };
+}
+
+function ctx2d(canvas){
+  if (!canvas) return null;
+  const c = canvas.getContext("2d");
+  c.clearRect(0,0,canvas.width,canvas.height);
+  return c;
+}
+function drawPie(canvas, counts){
+  const c = ctx2d(canvas);
+  if (!c) return;
+  const total = counts.reduce((a,b)=>a+b,0) || 1;
+  const w = canvas.width, h = canvas.height;
+  const cx = w/2, cy = h/2;
+  const r = Math.min(w,h)*0.38;
+  const colors = ["#6b6b6b", "#c1121f", "#d4af37", "#1b5e20"];
+  const labels = ["0/3","1/3","2/3","3/3"];
+  let a0 = -Math.PI/2;
+  for (let i=0;i<4;i++){
+    const frac = counts[i]/total;
+    const a1 = a0 + frac*2*Math.PI;
+    c.beginPath();
+    c.moveTo(cx,cy);
+    c.arc(cx,cy,r,a0,a1);
+    c.closePath();
+    c.fillStyle = colors[i];
+    c.fill();
+    a0 = a1;
+  }
+  c.font = "12px system-ui";
+  c.fillStyle = "#111";
+  let y = 16;
+  for (let i=0;i<4;i++){
+    c.fillStyle = colors[i];
+    c.fillRect(10, y-10, 10, 10);
+    c.fillStyle = "#111";
+    c.fillText(labels[i] + ": " + counts[i], 28, y);
+    y += 18;
+  }
+}
+function drawBars(canvas, items){
+  const c = ctx2d(canvas);
+  if (!c) return;
+  const w = canvas.width, h = canvas.height;
+  const pad = 32;
+  const maxV = Math.max(1, ...items.map(it=>it.value));
+  const n = Math.max(1, items.length);
+  const barW = Math.max(8, (w - pad*2) / n * 0.7);
+  const gap = ((w - pad*2) / n) - barW;
+  c.strokeStyle = "#2a2a2a";
+  c.beginPath();
+  c.moveTo(pad, pad);
+  c.lineTo(pad, h-pad);
+  c.lineTo(w-pad, h-pad);
+  c.stroke();
+  c.font = "11px system-ui";
+  c.fillStyle = "#111";
+  items.forEach((it, i) => {
+    const x = pad + i*(barW+gap) + gap/2;
+    const bh = (h - pad*2) * (it.value / maxV);
+    const y = (h - pad) - bh;
+    c.fillStyle = "#d4af37";
+    c.fillRect(x, y, barW, bh);
+    c.fillStyle = "#111";
+    c.fillText(it.xLabel, x, h - 12);
+  });
+  c.fillText("Finale (media) – completi", pad, 16);
+}
+function drawLine(canvas, items){
+  const c = ctx2d(canvas);
+  if (!c) return;
+  const w = canvas.width, h = canvas.height;
+  const pad = 32;
+  if (!items.length){
+    c.clearRect(0,0,w,h);
+    return;
+  }
+  const xs = items.map(it=>it.x);
+  const ys = items.map(it=>it.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const xScale = (val)=> pad + ((val-minX) / (maxX-minX || 1)) * (w-pad*2);
+  const yScale = (val)=> (h-pad) - ((val-minY) / (maxY-minY || 1)) * (h-pad*2);
+  c.strokeStyle = "#2a2a2a";
+  c.beginPath();
+  c.moveTo(pad, pad);
+  c.lineTo(pad, h-pad);
+  c.lineTo(w-pad, h-pad);
+  c.stroke();
+  c.strokeStyle = "#c1121f";
+  c.lineWidth = 2;
+  c.beginPath();
+  items.forEach((it,i)=>{
+    const x = xScale(it.x);
+    const y = yScale(it.y);
+    if (i===0) c.moveTo(x,y); else c.lineTo(x,y);
+  });
+  c.stroke();
+  c.fillStyle = "#c1121f";
+  items.forEach(it=>{
+    const x = xScale(it.x), y = yScale(it.y);
+    c.beginPath();
+    c.arc(x,y,3,0,2*Math.PI);
+    c.fill();
+  });
+  c.font = "11px system-ui";
+  c.fillStyle = "#111";
+  c.fillText("Andamento punteggi – completi", pad, 16);
+}
+
+function getUrlRole(){
+  const p = new URLSearchParams(location.search);
+  const r = (p.get("role")||"").toUpperCase().trim();
+  return ["ADMIN","J1","J2","J3","PUBLIC"].includes(r) ? r : null;
+}
+function roleKey(v){
+  return v==="J1"?"j1":(v==="J2"?"j2":(v==="J3"?"j3":null));
+}
+
+function rosterDocId(session, category){ return safeId(`${session}__${category}`); }
+function rosterRef(session, category){ return db.collection("rosters").doc(rosterDocId(session, category)); }
+function stateRef(session){ return db.collection("state").doc(String(session)); }
+function metaRef(){ return db.collection("meta").doc("global"); }
+function standingsRef(session, category){ return db.collection("standings").doc(`${session}__${category}`); }
+
+function perfId(session, category, startNum){ return safeId(`${session}__${category}__${startNum}`); }
+function perfRef(session, category, startNum){ return db.collection("performances").doc(perfId(session, category, startNum)); }
+
+// Public device lock
+const LS_DEVICE_ID = "fac_pub_device_v3";
+function getDeviceId(){
+  let id = localStorage.getItem(LS_DEVICE_ID);
+  if (!id){
+    id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+    localStorage.setItem(LS_DEVICE_ID, id);
+  }
+  return id;
+}
+function localVotedKey(perfIdStr){ return `fac_voted_${perfIdStr}`; }
+
+// Video: YouTube embed
+function toYouTubeEmbed(url){
+  if (!url) return null;
+  const u = String(url).trim();
+  let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  m = u.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  return null;
+}
+
+/* ======================
+   PUBLIC MODE / MAIN MODE
+====================== */
+function showPublicMode(){
+  appMain.classList.add("hide");
+  appPublic.classList.remove("hide");
+}
+function showMainMode(){
+  appPublic.classList.add("hide");
+  appMain.classList.remove("hide");
+}
+
+function lockRoleAndSessionForNonAdmin(){
+  const r = ruolo.value;
+  if (["J1","J2","J3","PUBLIC"].includes(r)){
+    ruolo.disabled = true;
+    sessione.disabled = true;
+    roleLockHint.textContent = "Ruolo e giornata gestiti dall’Admin";
+  } else if (r === "ADMIN"){
+    ruolo.disabled = false;
+    if (!forcedSession){
+      sessione.disabled = false;
+      roleLockHint.textContent = "";
+    }
+  }
+}
+
+function refreshMode(){
+  who.textContent = ruolo.value;
+  lockRoleAndSessionForNonAdmin();
+
+  if (isPublic()) showPublicMode();
+  else showMainMode();
+
+  if (isAdmin()){
+    if (isAdminUnlocked()) unlockAdmin();
+    else lockAdmin();
+  } else {
+    pinBox.classList.add("hide");
+    adminBody.classList.add("hide");
+  }
+}
 
 /* ======================
    DARK STAGE TOGGLE (LOCAL)
@@ -1247,39 +1174,32 @@ function applyTheme(theme){
 }
 applyTheme(localStorage.getItem(THEME_KEY) || "light");
 toggleThemeBtn.onclick = () => {
-  const cur = document.body.classList.contains("dark") ? "dark" : "light";
-  applyTheme(cur === "dark" ? "light" : "dark");
+  const next = document.body.classList.contains("dark") ? "light" : "dark";
+  applyTheme(next);
 };
 
 /* ======================
-   ROLE LOCK FROM URL
+   RULES
 ====================== */
-const forcedRole = getUrlRole();
-if (forcedRole){
-  ruolo.value = forcedRole;
-  
-  // 🔒 Giudici e Pubblico: niente scelta ruolo/sessione (li gestisce l'Admin)
-  
-const roleBox = document.getElementById("roleBox");
-const sessionBox = document.getElementById("sessionBox");
+const ADMIN_PIN = "2478";
+const CRITERI = ["Coreografia","Tecnica","Triks","Immagine","Presenza scenica","Performance generale"];
 
-function lockRoleAndSessionForNonAdmin(){
-  if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
-    ruolo.disabled = true;
-    sessione.disabled = true;
-    if (roleBox) roleBox.classList.add("hide");
-    if (sessionBox) sessionBox.classList.add("hide");
-    roleLockHint.textContent = "Gestito dall’Admin";
-  } else {
-    if (roleBox) roleBox.classList.remove("hide");
-    if (sessionBox) sessionBox.classList.remove("hide");
-  }
-}
-lockRoleAndSessionForNonAdmin();
-
-  ruolo.disabled = true;
-  roleLockHint.textContent = "Ruolo bloccato dal link";
-}
+const CATEGORY_ORDER = [
+  "Junior A",
+  "Junior B – Base",
+  "Teen – Base",
+  "Adulti – Base",
+  "Junior B – Intermedio",
+  "Teen – Intermedio",
+  "Adulti – Intermedio",
+  "Junior B – Avanzato",
+  "Teen – Avanzato",
+  "Adulti – Avanzato",
+  "Istruttori / Allenatori",
+  "Professional",
+  "Elite",
+  "Duo"
+];
 
 /* ======================
    ADMIN AUTH
@@ -1290,25 +1210,29 @@ const isPublic = () => ruolo.value === "PUBLIC";
 const isJudge = () => ["J1","J2","J3"].includes(ruolo.value);
 const isAdminUnlocked = () => localStorage.getItem(LS_ADMIN_OK)==="1";
 
-function lockAdmin(){
-  localStorage.removeItem(LS_ADMIN_OK);
-  pinBox.classList.remove("hide");
-  adminBody.classList.add("hide");
-  pinMsg.textContent = "";
-}
 function unlockAdmin(){
   localStorage.setItem(LS_ADMIN_OK,"1");
   pinBox.classList.add("hide");
   adminBody.classList.remove("hide");
-  pinMsg.textContent = "";
 }
+function lockAdmin(){
+  localStorage.removeItem(LS_ADMIN_OK);
+  adminBody.classList.add("hide");
+  pinBox.classList.remove("hide");
+}
+
 btnPin.onclick = () => {
-  if ((pin.value||"").trim() === ADMIN_PIN) unlockAdmin();
-  else pinMsg.textContent = "PIN non corretto.";
+  if (pin.value.trim() === ADMIN_PIN){
+    showMsg(pinMsg, "ok", "Admin sbloccato su questo dispositivo.");
+    unlockAdmin();
+    refreshMode();
+  } else {
+    showMsg(pinMsg, "bad", "PIN errato.");
+  }
 };
 
 /* ======================
-   UI HELPERS
+   MESSAGES
 ====================== */
 function showMsg(el, type, txt){
   el.classList.remove("hide","ok","bad","warn");
@@ -1320,51 +1244,70 @@ function hideMsg(el){
   el.textContent = "";
   el.classList.remove("ok","bad","warn");
 }
-function setJudgeEnabled(en){
-  critInputs.forEach(i=>i.disabled=!en);
-  pen.disabled=!en; note.disabled=!en; btnSend.disabled=!en; btnClear.disabled=!en;
-}
-function setStateBadge(kind, text){
-  stateBadge.className = "badge " + kind;
-  stateBadge.textContent = text;
-}
-function clearVideo(){
-  videoBox.innerHTML = "";
-  videoWrap.classList.add("hide");
-  videoHint.textContent = "";
-}
-function renderVideo(url){
-  const embed = toYouTubeEmbed(url);
-  if (!embed){ clearVideo(); return; }
-  videoWrap.classList.remove("hide");
-  videoBox.innerHTML = `<iframe src="${embed}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-  videoHint.textContent = "YouTube embed (solo riferimento).";
+
+/* ======================
+   CRITERIA BUILD
+====================== */
+let critInputs = [];
+function buildCriteria(){
+  critBody.innerHTML = "";
+  critInputs = [];
+  CRITERI.forEach((c,i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.style.marginTop = "6px";
+
+    const col1 = document.createElement("div");
+    col1.className = "col";
+    const lbl = document.createElement("label");
+    lbl.textContent = c;
+    col1.appendChild(lbl);
+
+    const col2 = document.createElement("div");
+    col2.style.minWidth = "120px";
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.min = "0";
+    inp.max = "10";
+    inp.step = "0.1";
+    inp.value = "0";
+    inp.oninput = recalc;
+    col2.appendChild(inp);
+
+    row.appendChild(col1);
+    row.appendChild(col2);
+    critBody.appendChild(row);
+    critInputs.push(inp);
+  });
 }
 
 /* ======================
-   BUILD CRITERIA
+   VIDEO
 ====================== */
-const critInputs = [];
-function buildCriteria(){
-  critBody.innerHTML = "";
-  critInputs.length = 0;
-
-  CRITERI.forEach(c => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${c}</td><td class="num"><input type="number" min="0" max="10" step="0.1" value="0.0"></td>`;
-    const inp = tr.querySelector("input");
-    inp.oninput = () => { inp.value = fmt1(clamp(parseFloat(inp.value),0,10)); recalc(); };
-    critBody.appendChild(tr);
-    critInputs.push(inp);
-  });
-
-  pen.oninput = () => { pen.value = fmt1(clamp(parseFloat(pen.value),0,100)); recalc(); };
-  recalc();
+function clearVideo(){
+  videoBox.innerHTML = "";
+  videoBox.classList.add("hide");
+  videoHint.classList.remove("hide");
 }
+function renderVideo(url){
+  const emb = toYouTubeEmbed(url);
+  if (!emb){
+    clearVideo();
+    return;
+  }
+  videoBox.innerHTML = `<iframe src="${emb}" allowfullscreen></iframe>`;
+  videoBox.classList.remove("hide");
+  videoHint.classList.add("hide");
+}
+
+/* ======================
+   CALC TOTAL
+====================== */
 function recalc(){
-  const s = critInputs.map(i=>clamp(parseFloat(i.value),0,10));
-  const p = clamp(parseFloat(pen.value),0,100);
-  tot.textContent = fmt1(sum(s) - p);
+  const scores = critInputs.map(i => clamp(parseFloat(i.value),0,10));
+  const penalty = clamp(parseFloat(pen.value),0,100);
+  const total = sum(scores) - penalty;
+  tot.textContent = fmt1(total);
 }
 
 /* ======================
@@ -1376,45 +1319,75 @@ function fillCategorySelect(sel){
 fillCategorySelect(adminCategory);
 fillCategorySelect(rosterCategory);
 
+// preview roster in Admin when selecting a category
+adminCategory.onchange = () => refreshAdminRosterPreview();
+
 /* ======================
    STATE + PERFORMANCE (CORE)
 ====================== */
-let unsubState = null;
+let unsubState = null;let unsubMeta = null;
+let forcedSession = null; // sessione imposta dall'Admin tramite Firestore
+
 let currentState = null;
-let unsubAdminPerf = null;
-let lastAutoPerfKey = null;
 
 let unsubPerf = null;
+let unsubAdminPerf = null;
+let unsubAdminMonitor = null;
+let lastAutoPerfKey = null;
+
 let lastPerfDoc = null;
+function listenMeta(){
+  if (unsubMeta) unsubMeta();
+  unsubMeta = metaRef().onSnapshot((snap) => {
+    if (!snap.exists) return;
+    const d = snap.data() || {};
+    const s = d.activeSession;
+
+    // Per Giudici e Pubblico: sessione forzata
+    if (!isAdmin()){
+      if (s && sessione.value !== s){
+        forcedSession = s;
+        sessione.value = s;
+        sessione.disabled = true;
+        roleLockHint.textContent = "Giornata gestita dall’Admin";
+        listenState(); // ricollega lo state listener sulla sessione corretta
+        if (isJudge()) listenPerformanceForJudges();
+      } else {
+        sessione.disabled = true;
+        roleLockHint.textContent = "Giornata gestita dall’Admin";
+      }
+    } else {
+      // Admin può scegliere
+      sessione.disabled = false;
+    }
+  });
+}
 
 function listenState(){
   if (unsubState) unsubState();
   unsubState = stateRef(sessione.value).onSnapshot((snap) => {
     currentState = snap.exists ? snap.data() : null;
-    if (isAdmin() && isAdminUnlocked()){
-  listenAdminLive();
-}
 
     if (isAdmin() && isAdminUnlocked()){
-  listenAdminAutoAdvance();
-}
+      listenAdminAutoAdvance();
+      listenAdminMonitor();
+    } else {
+      if (unsubAdminPerf){ unsubAdminPerf(); unsubAdminPerf = null; }
+      if (unsubAdminMonitor){ unsubAdminMonitor(); unsubAdminMonitor = null; }
+    }
 
     refreshFromState();
   });
 }
 
-function listenPerformanceForJudges(){
-  function listenAdminAutoAdvance(){
-  // Chiude listener precedente
-  if (unsubAdminPerf){
-    unsubAdminPerf();
-    unsubAdminPerf = null;
-  }
+function listenAdminAutoAdvance(){
+  // Chiude eventuale listener precedente
+  if (unsubAdminPerf){ unsubAdminPerf(); unsubAdminPerf = null; }
 
   // Solo Admin sbloccato
   if (!isAdmin() || !isAdminUnlocked()) return;
 
-  // Stato valido
+  // Serve una gara e una categoria attiva, e non deve essere bloccata
   if (!currentState || currentState.active !== true) return;
   if (currentState.categoryActive !== true) return;
   if (currentState.locked === true) return;
@@ -1433,109 +1406,31 @@ function listenPerformanceForJudges(){
     const ok2 = j.j2?.submitted === true;
     const ok3 = j.j3?.submitted === true;
 
-    // Se non hanno votato tutti, fermati
+    // Se non sono 3/3, non facciamo nulla
     if (!(ok1 && ok2 && ok3)) return;
 
+    // Evita doppio passaggio sullo stesso atleta
     const perfKey = `${sessione.value}__${cat}__${st}`;
     if (lastAutoPerfKey === perfKey) return;
     lastAutoPerfKey = perfKey;
 
-    // Piccola pausa di sicurezza
+    // Piccola pausa (anti-rimbalzo)
     setTimeout(async () => {
+      // Ricontrollo stato attuale prima di passare
       const stSnap = await stateRef(sessione.value).get();
       const sdata = stSnap.exists ? stSnap.data() : null;
 
       if (!sdata) return;
       if (sdata.locked === true) return;
       if (sdata.categoryActive !== true) return;
+
+      // Se nel frattempo Admin ha cambiato atleta/categoria, non facciamo nulla
       if (sdata.categoryName !== cat) return;
       if (String(sdata.start) !== String(st)) return;
 
-      // 👉 AVANZA AUTOMATICAMENTE
-      // 1) calcola il finale
-const f = getPerfFinal(d);
-if (f.all && typeof f.finalAvg === "number"){
-
-  // 2) salva storico atleta (results)
-  await resultItemRef(sessione.value, cat, st).set({
-    session: sessione.value,
-    category: cat,
-    start: String(st),
-    athlete: d?.atleta || currentState?.athleteName || "",
-    j1: (typeof f.t1 === "number") ? f.t1 : null,
-    j2: (typeof f.t2 === "number") ? f.t2 : null,
-    j3: (typeof f.t3 === "number") ? f.t3 : null,
-    finalAvg: f.finalAvg,
-    completedAt: Date.now()
-  }, { merge:true });
-
-  // 3) aggiorna classifica categoria (standings)
-  // evita scritture ripetute ravvicinate
-  const wKey = `${sessione.value}__${cat}`;
-  if (lastStandingsWriteKey !== wKey){
-    lastStandingsWriteKey = wKey;
-  }
-  await computeAndWriteStandings(sessione.value, cat);
-}
-
-// 👉 AVANZA AUTOMATICAMENTE
-await adminStepAthlete(+1);
-
+      // PASSA AL SUCCESSIVO
+      await adminStepAthlete(+1);
     }, 600);
-  });
-}
-
-  if (unsubPerf){ unsubPerf(); unsubPerf = null; }
-  lastPerfDoc = null;
-
-  if (!isJudge()) return;
-  if (!currentState || currentState.active !== true) return;
-
-  const cat = currentState.categoryName;
-  const st = currentState.start;
-  if (!cat || !st) return;
-
-  const ref = perfRef(sessione.value, cat, st);
-  unsubPerf = ref.onSnapshot((snap) => {
-    lastPerfDoc = snap.exists ? snap.data() : null;
-
-    const rk = roleKey(ruolo.value);
-    const mine = lastPerfDoc?.judges?.[rk];
-    const submitted = mine?.submitted === true;
-
-    submittedBadge.classList.toggle("hide", !submitted);
-
-    // state lock/active handles enable
-    if (!currentState || currentState.active !== true || currentState.locked === true || currentState.categoryActive !== true){
-      setJudgeEnabled(false);
-      return;
-    }
-
-    if (submitted){
-      setJudgeEnabled(false);
-      showMsg(judgeMsg, "ok", "Hai già inviato: definitivo.");
-      if (mine?.scores?.length === 6){
-        mine.scores.forEach((v,i)=>{ if (critInputs[i]) critInputs[i].value = fmt1(clamp(parseFloat(v),0,10)); });
-        pen.value = fmt1(clamp(parseFloat(mine.penalty||0),0,100));
-        note.value = mine.note || "";
-        recalc();
-      }
-      sync.textContent = "Inviato";
-      return;
-    }
-
-    setJudgeEnabled(true);
-    hideMsg(judgeMsg);
-
-    if (mine?.scores?.length === 6){
-      mine.scores.forEach((v,i)=>{ if (critInputs[i]) critInputs[i].value = fmt1(clamp(parseFloat(v),0,10)); });
-      pen.value = fmt1(clamp(parseFloat(mine.penalty||0),0,100));
-      note.value = mine.note || "";
-      recalc();
-      sync.textContent = "Sincronizzato";
-    } else {
-      sync.textContent = "—";
-    }
   });
 }
 
@@ -1555,7 +1450,12 @@ function refreshFromState(){
       showMsg(judgeMsg, "warn", "In attesa attivazione Admin.");
     }
     if (isPublic()){
-      applyPublic(null, "In attesa attivazione…");
+      applyPublic(null, "In attesa attivazione giornata…");
+    }
+
+    if (isAdmin() && isAdminUnlocked()){
+      btnUnfreeze.classList.add("hide");
+      btnFreeze.classList.remove("hide");
     }
     return;
   }
@@ -1586,9 +1486,10 @@ function refreshFromState(){
   }
 
   stateLine.textContent = `${st.categoryName || "—"} • Start ${st.start || "—"} • ${st.athleteName || "—"}`;
+  if (isAdmin() && adminMonNow){ adminMonNow.textContent = "Atleta: " + (st.athleteName || "—"); }
 
   catRO.value = st.categoryName || "";
-  startRO.value = String(st.start || "");
+  startRO.value = st.start || "";
   athRO.value = st.athleteName || "";
 
   if (st.videoUrl) renderVideo(st.videoUrl);
@@ -1621,6 +1522,82 @@ function refreshFromState(){
   if (isJudge()) listenPerformanceForJudges();
 }
 
+function setStateBadge(type, txt){
+  stateBadge.classList.remove("state-ok","state-warn","state-bad");
+  if (type==="ok") stateBadge.classList.add("state-ok");
+  else if (type==="bad") stateBadge.classList.add("state-bad");
+  else stateBadge.classList.add("state-warn");
+  stateBadge.textContent = txt;
+}
+
+/* ======================
+   PERFORMANCE LISTENER (JUDGES)
+====================== */
+function listenPerformanceForJudges(){
+  if (!isJudge()) return;
+  if (unsubPerf) unsubPerf();
+  if (!currentState || currentState.categoryActive !== true) return;
+
+  const cat = currentState.categoryName;
+  const st = currentState.start;
+  if (!cat || !st) return;
+
+  const ref = perfRef(sessione.value, cat, st);
+  unsubPerf = ref.onSnapshot((snap) => {
+    lastPerfDoc = snap.exists ? snap.data() : null;
+    const d = lastPerfDoc;
+    const rk = roleKey(ruolo.value);
+
+    if (!d){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "bad", "Scheda non pronta.");
+      return;
+    }
+
+    const j = d.judges || {};
+    const my = j[rk];
+
+    const frozen = currentState?.locked === true;
+    if (frozen){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
+      return;
+    }
+
+    if (my?.submitted){
+      setJudgeEnabled(false);
+      submittedBadge.style.display = "inline-flex";
+      showMsg(judgeMsg, "ok", "Hai già inviato: voti definitivi.");
+      // aggiorna campi con quello che avevi mandato
+      if (Array.isArray(my.scores)){
+        critInputs.forEach((inp,idx)=>{
+          inp.value = my.scores[idx] != null ? my.scores[idx] : 0;
+        });
+      }
+      pen.value = my.penalty != null ? my.penalty : 0;
+      note.value = my.note || "";
+      recalc();
+      return;
+    }
+
+    // Non ancora inviato
+    submittedBadge.style.display = "none";
+    setJudgeEnabled(true);
+    hideMsg(judgeMsg);
+
+    // non sovrascriviamo se il giudice sta già digitando
+    recalc();
+  });
+}
+
+function setJudgeEnabled(on){
+  critInputs.forEach(i => i.disabled = !on);
+  pen.disabled = !on;
+  note.disabled = !on;
+  btnSend.disabled = !on;
+  btnClear.disabled = !on;
+}
+
 /* ======================
    ADMIN: ROSTER LOAD/SAVE
 ====================== */
@@ -1635,40 +1612,65 @@ async function readRoster(session, category){
   }).filter(x => x.name);
 }
 
-function parseRosterLines(text){
-  const lines = String(text||"").split("\n").map(l=>l.trim()).filter(Boolean);
-  return lines.map(line => {
-    const parts = line.split("|").map(x=>x.trim()).filter(Boolean);
-    const name = parts[0] || "";
-    const videoUrl = parts[1] || "";
-    return { name, videoUrl };
-  }).filter(x => x.name);
-}
-function formatRosterLines(items){
-  return items.map(x => x.videoUrl ? `${x.name} | ${x.videoUrl}` : x.name).join("\n");
+async function writeRoster(session, category, list){
+  const doc = {
+    session,
+    category,
+    names: list.map(x => ({ name:x.name, videoUrl:x.videoUrl||"" })),
+    updatedAt: Date.now()
+  };
+  await rosterRef(session, category).set(doc, { merge:true });
 }
 
-async function rosterLoad(){
+function parseRosterText(raw){
+  const lines = String(raw||"").split(/\r?\n/);
+  const out = [];
+  for (const line of lines){
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split("|");
+    const name = parts[0].trim();
+    const videoUrl = (parts[1]||"").trim();
+    if (name){
+      out.push({ name, videoUrl });
+    }
+  }
+  return out;
+}
+
+async function refreshAdminRosterPreview(){
   const sess = rosterSession.value;
   const cat = rosterCategory.value;
-  const items = await readRoster(sess, cat);
-  rosterText.value = formatRosterLines(items);
-  rosterInfo.textContent = `Atleti: ${items.length} • Start previsti: 1 → ${items.length}`;
+  const list = await readRoster(sess, cat);
+  adminRosterCount.textContent = list.length;
+  if (!list.length){
+    adminRosterList.textContent = "Nessun atleta presente nel roster.";
+  } else {
+    adminRosterList.textContent = list.map((x,i)=>`${i+1}. ${x.name}${x.videoUrl ? " | " + x.videoUrl : ""}`).join("\n");
+  }
 }
 
-async function rosterSave(){
+btnRosterLoad.onclick = async () => {
   const sess = rosterSession.value;
   const cat = rosterCategory.value;
-  const items = parseRosterLines(rosterText.value);
+  const list = await readRoster(sess, cat);
+  rosterText.value = list.map(x => x.videoUrl ? `${x.name} | ${x.videoUrl}` : x.name).join("\n");
+  rosterInfo.textContent = `Caricati ${list.length} atleti da Firestore.`;
+};
 
-  await rosterRef(sess, cat).set({ names: items, updatedAt: Date.now() }, { merge:true });
-  rosterInfo.textContent = `Salvato • Atleti: ${items.length} • Start: 1 → ${items.length}`;
-  showMsg(adminMsg, "ok", "Roster salvato correttamente.");
-}
+btnRosterSave.onclick = async () => {
+  const sess = rosterSession.value;
+  const cat = rosterCategory.value;
+  const list = parseRosterText(rosterText.value);
+  await writeRoster(sess, cat, list);
+  rosterInfo.textContent = `Salvati ${list.length} atleti per ${cat}.`;
+  await refreshAdminRosterPreview();
+};
 
-btnRosterLoad.onclick = rosterLoad;
-btnRosterSave.onclick = rosterSave;
-btnRosterClear.onclick = () => { rosterText.value=""; rosterInfo.textContent="—"; };
+btnRosterClear.onclick = () => {
+  rosterText.value = "";
+  rosterInfo.textContent = "—";
+};
 
 /* ======================
    ADMIN: COMPETITION FLOW
@@ -1686,6 +1688,11 @@ async function ensurePerformanceDoc(categoryName, startNum, athleteName, videoUr
 }
 
 async function adminStartDay(){
+  await metaRef().set({
+    activeSession: sessione.value,
+    updatedAt: Date.now()
+  }, { merge:true });
+
   const sess = sessione.value;
   await stateRef(sess).set({
     active: true,
@@ -1698,48 +1705,57 @@ async function adminStartDay(){
     videoUrl: null,
     updatedAt: Date.now()
   }, { merge:true });
-  showMsg(adminMsg, "ok", "Giornata avviata. Ora attiva una categoria.");
+  showMsg(adminMsg, "ok", "Giornata attivata. Ora seleziona una categoria e avviala.");
 }
 
 async function adminStopDay(){
   const sess = sessione.value;
   await stateRef(sess).set({
     active: false,
-    locked: false,
     categoryActive: false,
+    locked: false,
     updatedAt: Date.now()
   }, { merge:true });
-  showMsg(adminMsg, "warn", "Giornata fermata. Giudici e pubblico disabilitati.");
+  showMsg(adminMsg, "warn", "Giornata fermata.");
 }
 
 async function adminFreeze(on){
   const sess = sessione.value;
-  await stateRef(sess).set({ locked: !!on, updatedAt: Date.now() }, { merge:true });
-  showMsg(adminMsg, on ? "warn" : "ok", on ? "Votazioni bloccate." : "Votazioni sbloccate.");
+  await stateRef(sess).set({
+    locked: !!on,
+    updatedAt: Date.now()
+  }, { merge:true });
+  showMsg(adminMsg, on ? "bad" : "ok", on ? "Votazioni bloccate." : "Votazioni sbloccate.");
 }
 
 async function adminActivateCategory(){
   const sess = sessione.value;
   const catName = adminCategory.value;
-
-  const roster = await readRoster(sess, catName);
-  if (!roster.length){
-    showMsg(adminMsg, "bad", "Roster vuoto per questa categoria. Carica prima gli atleti.");
+  const idx = CATEGORY_ORDER.indexOf(catName);
+  if (idx < 0){
+    showMsg(adminMsg, "bad", "Categoria non valida.");
     return;
   }
 
-  const athlete = roster[0]?.name || "";
-  const videoUrl = roster[0]?.videoUrl || "";
+  const roster = await readRoster(sess, catName);
+  if (!roster.length){
+    showMsg(adminMsg, "bad", "Nessun atleta nel roster di questa categoria.");
+    return;
+  }
+
+  const first = roster[0];
+  const athlete = first.name;
+  const videoUrl = first.videoUrl || "";
 
   await stateRef(sess).set({
     active: true,
-    categoryActive: true,
     locked: false,
-    categoryIndex: CATEGORY_ORDER.indexOf(catName),
+    categoryActive: true,
+    categoryIndex: idx,
     categoryName: catName,
-    start: 1,
+    start: "1",
     athleteName: athlete,
-    videoUrl,
+    videoUrl: videoUrl,
     updatedAt: Date.now()
   }, { merge:true });
 
@@ -1775,51 +1791,68 @@ async function adminStepAthlete(delta){
     return;
   }
 
-  const catName = st.categoryName;
-  const roster = await readRoster(sess, catName);
-
-  let nextStart = (parseInt(st.start,10) || 1) + delta;
-  if (nextStart < 1) nextStart = 1;
-
-  // stop automatico quando finisce roster
-  if (nextStart > roster.length){
-    await stateRef(sess).set({
-      categoryActive: false,
-      start: null,
-      athleteName: null,
-      videoUrl: null,
-      updatedAt: Date.now()
-    }, { merge:true });
-
-    showMsg(adminMsg, "ok", "Categoria completata (fine roster). Attiva la prossima categoria.");
+  const cat = st.categoryName;
+  const idx = CATEGORY_ORDER.indexOf(cat);
+  if (idx < 0){
+    showMsg(adminMsg, "bad", "Categoria non valida.");
     return;
   }
 
-  const athlete = roster[nextStart-1]?.name || "";
-  const videoUrl = roster[nextStart-1]?.videoUrl || "";
+  const roster = await readRoster(sess, cat);
+  if (!roster.length){
+    showMsg(adminMsg, "bad", "Roster vuoto.");
+    return;
+  }
+
+  let cur = parseInt(st.start || "1", 10) || 1;
+  let next = cur + delta;
+  if (next < 1) next = 1;
+  if (next > roster.length) next = roster.length;
+
+  const athlete = roster[next-1].name;
+  const videoUrl = roster[next-1].videoUrl || "";
 
   await stateRef(sess).set({
-    start: nextStart,
+    categoryActive: true,
+    categoryIndex: idx,
+    categoryName: cat,
+    start: String(next),
     athleteName: athlete,
-    videoUrl,
+    videoUrl: videoUrl,
     updatedAt: Date.now()
   }, { merge:true });
 
-  await ensurePerformanceDoc(catName, nextStart, athlete, videoUrl);
+  await ensurePerformanceDoc(cat, next, athlete, videoUrl);
 
-  showMsg(adminMsg, "ok", `Ora: ${catName} • Start ${nextStart} • ${athlete || "—"}`);
+  showMsg(adminMsg, "ok", `Passato all’atleta ${next}/${roster.length}: ${athlete}.`);
 }
 
 async function adminFixAthleteName(){
   const sess = sessione.value;
-  const name = (fixAth.value||"").trim();
-  if (!name){ showMsg(adminMsg, "bad", "Inserisci un nome atleta."); return; }
-
   const st = currentState;
-  if (!st?.categoryName || !st?.start){ showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere."); return; }
+  if (!st?.categoryName || !st?.start){
+    showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere.");
+    return;
+  }
+  const newName = (fixAth.value||"").trim();
+  if (!newName){
+    showMsg(adminMsg, "bad", "Inserisci un nome valido.");
+    return;
+  }
 
-  await stateRef(sess).set({ athleteName: name, updatedAt: Date.now() }, { merge:true });
-  await perfRef(sess, st.categoryName, st.start).set({ atleta: name }, { merge:true });
+  const roster = await readRoster(sess, st.categoryName);
+  const idx = parseInt(st.start||"1",10)-1;
+  if (idx>=0 && idx<roster.length){
+    roster[idx].name = newName;
+    await writeRoster(sess, st.categoryName, roster);
+  }
+
+  await stateRef(sess).set({
+    athleteName: newName,
+    updatedAt: Date.now()
+  }, { merge:true });
+
+  await perfRef(sess, st.categoryName, st.start).set({ atleta: newName }, { merge:true });
 
   showMsg(adminMsg, "ok", "Nome atleta aggiornato.");
   fixAth.value = "";
@@ -1830,7 +1863,10 @@ async function adminFixVideoUrl(){
   const url = (fixVideo.value||"").trim();
 
   const st = currentState;
-  if (!st?.categoryName || !st?.start){ showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere."); return; }
+  if (!st?.categoryName || !st?.start){
+    showMsg(adminMsg, "bad", "Nessuna scheda attiva da correggere.");
+    return;
+  }
 
   await stateRef(sess).set({ videoUrl: url, updatedAt: Date.now() }, { merge:true });
   await perfRef(sess, st.categoryName, st.start).set({ videoUrl: url }, { merge:true });
@@ -1851,6 +1887,101 @@ btnNextAth.onclick = () => adminStepAthlete(+1);
 
 btnFixAth.onclick = adminFixAthleteName;
 btnFixVideo.onclick = adminFixVideoUrl;
+
+function clearAdminMonitor(){
+  if (adminMonCat) adminMonCat.textContent = "Categoria: —";
+  if (adminMonNow) adminMonNow.textContent = "Atleta: —";
+  if (adminMonCount) adminMonCount.textContent = "—";
+  if (adminMonBody) adminMonBody.innerHTML = "";
+  if (adminPie) ctx2d(adminPie);
+  if (adminBars) ctx2d(adminBars);
+  if (adminLine) ctx2d(adminLine);
+}
+
+function updateAdminMonitor(perfDocs){
+  if (!adminMonBody) return;
+
+  adminMonCount.textContent = perfDocs.length
+    ? perfDocs.length + " performance"
+    : "Nessuna performance";
+
+  const rows = perfDocs.map(p => {
+    const finalTxt = (typeof p.finalAvg === "number") ? fmt1(p.finalAvg) : "—";
+    const votesTxt = (p.votedCount != null) ? (p.votedCount + "/3") : "—";
+    return `<tr>
+      <td>${p.startNum}</td>
+      <td>${(p.atleta || "").replace(/[<>]/g,"")}</td>
+      <td class="num">${votesTxt}</td>
+      <td class="num">${finalTxt}</td>
+    </tr>`;
+  }).join("");
+  adminMonBody.innerHTML = rows || "";
+
+  // grafici
+  let c0=0,c1=0,c2=0,c3=0;
+  const bars = [];
+  const line = [];
+
+  perfDocs.forEach(p=>{
+    const vc = p.votedCount || 0;
+    if (vc === 0) c0++;
+    else if (vc === 1) c1++;
+    else if (vc === 2) c2++;
+    else c3++;
+
+    if (typeof p.finalAvg === "number"){
+      bars.push({ xLabel: String(p.startNum), value: p.finalAvg });
+      line.push({ x: p.startNum, y: p.finalAvg });
+    }
+  });
+
+  drawPie(adminPie, [c0,c1,c2,c3]);
+
+  bars.sort((a,b)=>Number(a.xLabel)-Number(b.xLabel));
+  line.sort((a,b)=>a.x-b.x);
+
+  drawBars(adminBars, bars);
+  drawLine(adminLine, line);
+}
+
+function listenAdminMonitor(){
+  if (unsubAdminMonitor){ unsubAdminMonitor(); unsubAdminMonitor = null; }
+  clearAdminMonitor();
+
+  if (!isAdmin() || !isAdminUnlocked()) return;
+  if (!currentState || currentState.active !== true) return;
+  if (currentState.categoryActive !== true) return;
+
+  const sess = sessione.value;
+  const cat = currentState.categoryName;
+  if (!sess || !cat) return;
+
+  if (adminMonCat) adminMonCat.textContent = "Categoria: " + cat;
+
+  const q = db.collection("performances")
+    .where("sessione","==",sess)
+    .where("categoria","==",cat);
+
+  unsubAdminMonitor = q.onSnapshot((qs) => {
+    const perfDocs = [];
+    qs.forEach(doc => {
+      const d = doc.data() || {};
+      const fin = getPerfFinal(d);
+      const startNum = parseInt(d.start || "0", 10) || 0;
+      perfDocs.push({
+        startNum,
+        atleta: d.atleta || "",
+        votedCount: fin.votedCount,
+        t1: fin.t1,
+        t2: fin.t2,
+        t3: fin.t3,
+        finalAvg: fin.finalAvg
+      });
+    });
+    perfDocs.sort((a,b)=> a.startNum - b.startNum);
+    updateAdminMonitor(perfDocs);
+  });
+}
 
 /* ======================
    JUDGE SUBMIT
@@ -1898,18 +2029,9 @@ btnSend.onclick = async () => {
     return;
   }
 
- await ref.set({
-  // campi base per query Admin/monitor
-  sessione: sessione.value,
-  categoria: cat,
-  start: String(st),
-  atleta: currentState.athleteName || "",
-  videoUrl: currentState.videoUrl || "",
-
-  // voto giudice
-  judges: { [rk]: { scores, penalty, note: nt, submitted:true, submittedAt: Date.now() } }
-}, { merge:true });
-
+  await ref.set({
+    judges: { [rk]: { scores, penalty, note: nt, submitted:true, submittedAt: Date.now() } }
+  }, { merge:true });
 
   sync.textContent = "Inviato";
   showMsg(judgeMsg, "ok", "Voti inviati. Grazie.");
@@ -1917,8 +2039,9 @@ btnSend.onclick = async () => {
 
 btnClear.onclick = () => {
   if (!isJudge()) return;
-  critInputs.forEach(i=>i.value="0.0");
-  pen.value="0.0"; note.value="";
+  critInputs.forEach(i => i.value = "0");
+  pen.value = "0";
+  note.value = "";
   recalc();
 };
 
@@ -1938,54 +2061,97 @@ function hidePub(){
 pubSlider.oninput = () => { pubValue.textContent = String(pubSlider.value); };
 
 function applyPublic(st, forcedMessage){
+  if (forcedMessage){
+    pubMeta.textContent = forcedMessage;
+    pubAthlete.textContent = "—";
+    pubVoteBtn.disabled = true;
+    hidePub();
+    return;
+  }
+
   if (!st || st.active !== true){
+    pubMeta.textContent = "In attesa attivazione giornata…";
     pubAthlete.textContent = "—";
-    pubMeta.textContent = forcedMessage || "In attesa attivazione…";
     pubVoteBtn.disabled = true;
-    if (forcedMessage) showPub("warn", forcedMessage); else hidePub();
+    hidePub();
     return;
   }
+
+  if (st.locked === true){
+    pubMeta.textContent = "Votazioni momentaneamente bloccate.";
+    pubAthlete.textContent = "—";
+    pubVoteBtn.disabled = true;
+    hidePub();
+    return;
+  }
+
   if (st.categoryActive !== true){
+    pubMeta.textContent = "In attesa prossima categoria…";
     pubAthlete.textContent = "—";
-    pubMeta.textContent = forcedMessage || "In attesa prossima categoria…";
     pubVoteBtn.disabled = true;
-    if (forcedMessage) showPub("warn", forcedMessage); else hidePub();
+    hidePub();
     return;
   }
 
-  const pid = perfId(sessione.value, st.categoryName, st.start);
-  pubAthlete.textContent = st.athleteName || "Atleta";
-  pubMeta.textContent = `${st.categoryName || ""} • Start ${st.start || ""}`.trim();
+  pubAthlete.textContent = st.athleteName || "—";
+  pubMeta.textContent = `${st.categoryName || "—"} • Start ${st.start || "—"}`;
+  pubVoteBtn.disabled = false;
+  hidePub();
+}
 
-  const already = localStorage.getItem(localVotedKey(pid)) === "1";
-  pubVoteBtn.disabled = already;
+async function sendPublicVote(){
+  if (!currentState || currentState.active !== true || currentState.categoryActive !== true){
+    showPub("warn", "In attesa attivazione categoria.");
+    return;
+  }
+  if (currentState.locked === true){
+    showPub("bad", "Votazioni bloccate dall’Admin.");
+    return;
+  }
 
-  if (already) showPub("ok", "Hai già votato questo atleta su questo dispositivo. Grazie!");
-  else hidePub();
+  const sess = sessione.value;
+  const cat = currentState.categoryName;
+  const st = currentState.start;
+  if (!sess || !cat || !st){
+    showPub("bad", "Scheda non pronta.");
+    return;
+  }
 
-  pubVoteBtn.onclick = async () => {
-    if (localStorage.getItem(localVotedKey(pid)) === "1"){
-      pubVoteBtn.disabled = true;
-      showPub("ok", "Hai già votato questo atleta.");
+  const perfIdStr = perfId(sess, cat, st);
+  const docRef = voteDocRef(perfIdStr);
+
+  const localKey = localVotedKey(perfIdStr);
+  if (localStorage.getItem(localKey)==="1"){
+    showPub("warn", "Hai già votato questo atleta da questo dispositivo.");
+    return;
+  }
+
+  const snap = await docRef.get();
+  if (snap.exists){
+    const d = snap.data() || {};
+    if (d.deviceId === getDeviceId()){
+      showPub("warn", "Hai già votato questo atleta da questo dispositivo.");
+      localStorage.setItem(localKey,"1");
       return;
     }
-    const value = parseInt(pubSlider.value,10);
-    await voteDocRef(pid).set({
-      sessione: sessione.value,
-      perfId: pid,
-      categoria: st.categoryName || "",
-      start: String(st.start || ""),
-      atleta: st.athleteName || "",
-      value,
-      deviceId: getDeviceId(),
-      createdAt: Date.now()
-    }, { merge:true });
+  }
 
-    localStorage.setItem(localVotedKey(pid), "1");
-    pubVoteBtn.disabled = true;
-    showPub("ok", "Voto registrato. Grazie!");
-  };
+  const val = parseInt(pubSlider.value,10) || 5;
+  await docRef.set({
+    perfId: perfIdStr,
+    sessione: sess,
+    categoria: cat,
+    start: String(st),
+    deviceId: getDeviceId(),
+    voto: val,
+    createdAt: Date.now()
+  });
+
+  localStorage.setItem(localKey,"1");
+  showPub("ok", "Grazie! Il tuo voto è stato registrato.");
 }
+
+pubVoteBtn.onclick = sendPublicVote;
 
 /* ======================
    MODE SWITCH
@@ -1999,39 +2165,13 @@ function showMainMode(){
   appMain.classList.remove("hide");
 }
 
-function refreshMode(){
-  who.textContent = ruolo.value;
-const roleBox = document.getElementById("roleBox");
-const sessionBox = document.getElementById("sessionBox");
-
-if (["J1","J2","J3","PUBLIC"].includes(ruolo.value)){
-  if (roleBox) roleBox.classList.add("hide");
-  if (sessionBox) sessionBox.classList.add("hide");
-  ruolo.disabled = true;
-  sessione.disabled = true;
-} else {
-  if (roleBox) roleBox.classList.remove("hide");
-  if (sessionBox) sessionBox.classList.remove("hide");
-}
-
-  if (isPublic()) showPublicMode();
-  else showMainMode();
-
-  if (isAdmin()){
-    if (isAdminUnlocked()) unlockAdmin();
-    else lockAdmin();
-  } else {
-    pinBox.classList.add("hide");
-    adminBody.classList.add("hide");
-  }
-}
-
 /* ======================
    INIT
 ====================== */
 buildCriteria();
 refreshMode();
 listenState();
+listenMeta();
 
 // keep roster session aligned
 rosterSession.value = sessione.value;
@@ -2049,31 +2189,31 @@ sessione.onchange = () => {
   rosterSession.value = sessione.value;
   listenState();
   if (isJudge()) listenPerformanceForJudges();
+  if (isAdmin() && isAdminUnlocked()) refreshAdminRosterPreview();
 };
 
 // network badge
 window.addEventListener("online",  ()=> envBadge.textContent = "Online");
 window.addEventListener("offline", ()=> envBadge.textContent = "Offline");
-  // ✅ FORCE: riempi sempre i menu categorie quando la pagina è pronta
-window.addEventListener("DOMContentLoaded", () => {
-  try {
-    const adminCategoryEl = document.getElementById("adminCategory");
-    const rosterCategoryEl = document.getElementById("rosterCategory");
 
-    if (typeof fillCategorySelect === "function") {
-      if (adminCategoryEl) fillCategorySelect(adminCategoryEl);
-      if (rosterCategoryEl) fillCategorySelect(rosterCategoryEl);
-    }
+/* ======================
+   FORCE ROLE FROM URL
+====================== */
+let forcedRole = null;
+let forcedSessionFromUrl = null;
 
-    // Admin: il menu categoria deve essere selezionabile
-    if (adminCategoryEl && ruolo?.value === "ADMIN") {
-      adminCategoryEl.disabled = false;
-    }
-  } catch (e) {
-    console.error("FORCE category fill error:", e);
-  }
-});
+forcedRole = getUrlRole();
+if (forcedRole){
+  ruolo.value = forcedRole;
+  ruolo.disabled = true;
+  roleLockHint.textContent = "Ruolo bloccato dal link";
+  lockRoleAndSessionForNonAdmin();
+}
 
+/* ======================
+   APPLY INITIAL RECALC
+====================== */
+recalc();
 </script>
 </body>
 </html>

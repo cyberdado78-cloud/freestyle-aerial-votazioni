@@ -507,7 +507,49 @@
     @media (max-width:720px){
       .topbar{ flex-direction:column; align-items:flex-start; }
     }
+/* Judge panel – criteri più leggibili */
+.critRow{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  padding:6px 10px;
+  border-radius:12px;
+  background:rgba(0,0,0,0.02);
+  margin-top:4px;
+}
+.critLabelCol label{
+  margin:0;
+  font-size:13px;
+  text-transform:none;
+  letter-spacing:0;
+  font-weight:600;
+}
+.critScoreCol input{
+  text-align:right;
+  font-size:16px;
+  font-weight:600;
+  padding-right:12px;
+  border-radius:999px;
+}
 
+/* In dark mode */
+body.dark .critRow{
+  background:rgba(255,255,255,0.04);
+}
+body.dark .critScoreCol input{
+  background:rgba(0,0,0,0.9);
+  border-color:rgba(255,255,255,0.12);
+}
+
+/* Totale giudice in evidenza */
+#tot{
+  font-size:24px;
+  font-weight:800;
+  letter-spacing:0.08em;
+}
+body.dark #tot{
+  text-shadow:0 0 18px rgba(212,175,55,0.6);
+}
     iframe{
       border-radius:16px;
       border:none;
@@ -779,15 +821,18 @@ Atleta 3 | https://youtu.be/..."></textarea>
 
             <h2>Valutazione giudice</h2>
             <p class="hint">
-              Compila solo se sei un giudice. Ogni criterio da 0 a 10, penalità da 0 a 100. La penalità richiede <b>nota obbligatoria</b>.
+              <div class="pill" style="margin-bottom:4px;">
+  Dispositivo: <b id="judgeRolePill">—</b>
+</div>
+              Compila solo se sei un giudice. Ogni criterio da 0 a 10, penalità da 0 a 10. La penalità richiede <b>nota obbligatoria</b>.
             </p>
 
             <div id="critBody"></div>
 
             <div class="row" style="margin-top:8px;">
               <div class="col" style="max-width:220px;">
-                <label>Penalità (0–100)</label>
-                <input id="pen" type="number" value="0" min="0" max="100" step="0.1">
+                <label>Penalità (0–10)</label>
+                <input id="pen" type="number" value="0" min="0" max="10" step="0.1">
               </div>
               <div class="col">
                 <label>Nota (obbligatoria se penalità > 0)</label>
@@ -1201,7 +1246,18 @@ function lockRoleAndSessionForNonAdmin(){
 function refreshMode(){
   who.textContent = ruolo.value;
   lockRoleAndSessionForNonAdmin();
-
+  const judgeRolePill = document.getElementById("judgeRolePill");
+  if (judgeRolePill){
+    if (isJudge()){
+      judgeRolePill.textContent = ruolo.value;
+    } else if (isAdmin()){
+      judgeRolePill.textContent = "Admin";
+    } else if (isPublic()){
+      judgeRolePill.textContent = "Pubblico";
+    } else {
+      judgeRolePill.textContent = "—";
+    }
+  }
   if (isPublic()) showPublicMode();
   else showMainMode();
 
@@ -1245,16 +1301,20 @@ const CATEGORY_ORDER = [
   "Junior B – Base",
   "Teen – Base",
   "Adulti – Base",
+  "Senior - Base",
   "Junior B – Intermedio",
   "Teen – Intermedio",
   "Adulti – Intermedio",
+  "Seenior - Intermedio",
   "Junior B – Avanzato",
   "Teen – Avanzato",
   "Adulti – Avanzato",
+  "Senior - Avanzato",
+  "Duo",
   "Istruttori / Allenatori",
+  "Duo Professional",
   "Professional",
-  "Elite",
-  "Duo"
+  "Elite"
 ];
 
 /* ======================
@@ -1310,16 +1370,16 @@ function buildCriteria(){
   critInputs = [];
   CRITERI.forEach((c,i) => {
     const row = document.createElement("div");
-    row.className = "row";
-    row.style.marginTop = "6px";
+    row.className = "critRow";        // 👈 classe per il CSS
 
     const col1 = document.createElement("div");
-    col1.className = "col";
+    col1.className = "critLabelCol";  // 👈 classe per etichetta
     const lbl = document.createElement("label");
     lbl.textContent = c;
     col1.appendChild(lbl);
 
     const col2 = document.createElement("div");
+    col2.className = "critScoreCol";  // 👈 classe per input punteggio
     col2.style.minWidth = "120px";
     const inp = document.createElement("input");
     inp.type = "number";

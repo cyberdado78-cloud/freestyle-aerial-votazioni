@@ -355,63 +355,58 @@
       font-weight:700;
       margin:0 auto;
     }
-.publicCard{
-  position:relative;
-  overflow:hidden;
-  padding-top:22px;
-  padding-bottom:18px;
-  background-image: url("/assets/pub-bg.jpg"); /* <-- carica tu questa immagine */
-  background-size: cover;
-  background-position: center;
-  color:#f9fafb;
-  border-color: rgba(212,175,55,0.6);
-  box-shadow:0 22px 60px rgba(0,0,0,0.9);
-}
-.publicCard::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:radial-gradient(circle at top, rgba(0,0,0,0.15) 0, rgba(0,0,0,0.65) 55%, rgba(0,0,0,0.9) 100%);
-  pointer-events:none;
-}
-.publicCard > *{
-  position:relative;
-  z-index:1;
-}
+    .publicCard{
+      position:relative;
+      overflow:hidden;
+      padding-top:22px;
+      padding-bottom:18px;
+      background-image: url("/assets/pub-bg.jpg"); /* <-- carica tu questa immagine */
+      background-size: cover;
+      background-position: center;
+      color:#f9fafb;
+      border-color: rgba(212,175,55,0.6);
+      box-shadow:0 22px 60px rgba(0,0,0,0.9);
+    }
+    .publicCard::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:radial-gradient(circle at top, rgba(0,0,0,0.15) 0, rgba(0,0,0,0.65) 55%, rgba(0,0,0,0.9) 100%);
+      pointer-events:none;
+    }
+    .publicCard > *{
+      position:relative;
+      z-index:1;
+    }
 
-.publicCard .hint{
-  color:#e5e7eb;
-}
-.publicCard .badge.accent{
-  background: radial-gradient(circle at top left, #fefce8 0, #facc15 35%, #c2410c 100%);
-  color:#111827;
-  text-shadow:none;
-}
+    .publicCard .hint{ color:#e5e7eb; }
+    .publicCard .badge.accent{
+      background: radial-gradient(circle at top left, #fefce8 0, #facc15 35%, #c2410c 100%);
+      color:#111827;
+      text-shadow:none;
+    }
 
-.publicCard .scoreCircle{
-  width:72px;
-  height:72px;
-  border-width:4px;
-  border-color:#facc15;
-  background:rgba(15,23,42,0.85);
-  box-shadow:0 12px 28px rgba(0,0,0,0.9);
-  font-size:22px;
-}
+    .publicCard .scoreCircle{
+      width:72px;
+      height:72px;
+      border-width:4px;
+      border-color:#facc15;
+      background:rgba(15,23,42,0.85);
+      box-shadow:0 12px 28px rgba(0,0,0,0.9);
+      font-size:22px;
+    }
 
-.publicCard button.primary{
-  width:100%;
-  justify-content:center;
-  background: radial-gradient(circle at top left, #fefce8 0, #f97316 45%, #b91c1c 100%);
-  color:#111827;
-  box-shadow:0 18px 40px rgba(0,0,0,0.9);
-}
+    .publicCard button.primary{
+      width:100%;
+      justify-content:center;
+      background: radial-gradient(circle at top left, #fefce8 0, #f97316 45%, #b91c1c 100%);
+      color:#111827;
+      box-shadow:0 18px 40px rgba(0,0,0,0.9);
+    }
 
-.publicCard .brand{
-  justify-content:center;
-}
-.publicCard .brand img{
-  height:40px;
-}
+    .publicCard .brand{ justify-content:center; }
+    .publicCard .brand img{ height:40px; }
+
     /* Dark stage */
     body.dark{
       background:#050505;
@@ -448,15 +443,9 @@
       background: radial-gradient(circle at top left, #f4f4f5 0, #d4af37 35%, #c1121f 100%);
       color:#050505;
     }
-    body.dark table{
-      background:#050505;
-    }
-    body.dark th{
-      background:#111111;
-    }
-    body.dark td{
-      border-bottom-color:rgba(255,255,255,0.06);
-    }
+    body.dark table{ background:#050505; }
+    body.dark th{ background:#111111; }
+    body.dark td{ border-bottom-color:rgba(255,255,255,0.06); }
     body.dark .divider{
       background:linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.02));
     }
@@ -507,49 +496,49 @@
     @media (max-width:720px){
       .topbar{ flex-direction:column; align-items:flex-start; }
     }
-/* Judge panel – criteri più leggibili */
-.critRow{
-  display:flex;
-  align-items:flex-end;
-  gap:10px;
-  padding:6px 10px;
-  border-radius:12px;
-  background:rgba(0,0,0,0.02);
-  margin-top:4px;
-}
-.critLabelCol label{
-  margin:0;
-  font-size:13px;
-  text-transform:none;
-  letter-spacing:0;
-  font-weight:600;
-}
-.critScoreCol input{
-  text-align:right;
-  font-size:16px;
-  font-weight:600;
-  padding-right:12px;
-  border-radius:999px;
-}
 
-/* In dark mode */
-body.dark .critRow{
-  background:rgba(255,255,255,0.04);
-}
-body.dark .critScoreCol input{
-  background:rgba(0,0,0,0.9);
-  border-color:rgba(255,255,255,0.12);
-}
+    /* Judge panel – criteri più leggibili */
+    .critRow{
+      display:flex;
+      align-items:flex-end;
+      gap:10px;
+      padding:6px 10px;
+      border-radius:12px;
+      background:rgba(0,0,0,0.02);
+      margin-top:4px;
+    }
+    .critLabelCol label{
+      margin:0;
+      font-size:13px;
+      text-transform:none;
+      letter-spacing:0;
+      font-weight:600;
+    }
+    .critScoreCol input{
+      text-align:right;
+      font-size:16px;
+      font-weight:600;
+      padding-right:12px;
+      border-radius:999px;
+    }
 
-/* Totale giudice in evidenza */
-#tot{
-  font-size:24px;
-  font-weight:800;
-  letter-spacing:0.08em;
-}
-body.dark #tot{
-  text-shadow:0 0 18px rgba(212,175,55,0.6);
-}
+    /* In dark mode */
+    body.dark .critRow{ background:rgba(255,255,255,0.04); }
+    body.dark .critScoreCol input{
+      background:rgba(0,0,0,0.9);
+      border-color:rgba(255,255,255,0.12);
+    }
+
+    /* Totale giudice in evidenza */
+    #tot{
+      font-size:24px;
+      font-weight:800;
+      letter-spacing:0.08em;
+    }
+    body.dark #tot{
+      text-shadow:0 0 18px rgba(212,175,55,0.6);
+    }
+
     iframe{
       border-radius:16px;
       border:none;
@@ -559,6 +548,7 @@ body.dark #tot{
     }
   </style>
 </head>
+
 <body>
   <div class="appWrap">
     <div class="topbar">
@@ -619,6 +609,7 @@ body.dark #tot{
 
             <p class="hint" id="stateLine" style="margin-top:8px;">In attesa attivazione giornata.</p>
 
+            <!-- PIN solo Admin (Pubblico libero) -->
             <div id="pinBox" class="hide" style="margin-top:10px;">
               <label>PIN Admin</label>
               <div class="row">
@@ -642,6 +633,11 @@ body.dark #tot{
               <div class="row">
                 <button id="btnStartDay" class="primary">Avvia giornata</button>
                 <button id="btnStopDay">Ferma giornata</button>
+                <button id="btnPauseDay" class="btnGhost">Pausa</button>
+                <button id="btnResumeDay" class="btnGhost hide">Riprendi</button>
+              </div>
+
+              <div class="row" style="margin-top:8px;">
                 <button id="btnFreeze">Blocca votazioni</button>
                 <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
               </div>
@@ -676,7 +672,7 @@ body.dark #tot{
                   <div class="divider" style="margin:12px 0;"></div>
 
                   <label>Atleta in uscita</label>
-                  <input id="athRO" readonly placeholder="—">
+                  <input id="athRO_admin" readonly placeholder="—">
                   <div class="row" style="margin-top:10px">
                     <button id="btnPrevAth">← Atleta precedente</button>
                     <button id="btnNextAth" class="primary">Atleta successivo →</button>
@@ -822,8 +818,8 @@ Atleta 3 | https://youtu.be/..."></textarea>
             <h2>Valutazione giudice</h2>
             <p class="hint">
               <div class="pill" style="margin-bottom:4px;">
-  Dispositivo: <b id="judgeRolePill">—</b>
-</div>
+                Dispositivo: <b id="judgeRolePill">—</b>
+              </div>
               Compila solo se sei un giudice. Ogni criterio da 0 a 10, penalità da 0 a 10. La penalità richiede <b>nota obbligatoria</b>.
             </p>
 
@@ -835,7 +831,7 @@ Atleta 3 | https://youtu.be/..."></textarea>
                 <input id="pen" type="number" value="0" min="0" max="10" step="0.1">
               </div>
               <div class="col">
-                <label>Nota (obbligatoria se penalità > 0)</label>
+                <label>Nota (obbligatoria se penalità &gt; 0)</label>
                 <textarea id="note" placeholder="Motivazione penalità o nota tecnica"></textarea>
               </div>
             </div>
@@ -859,7 +855,7 @@ Atleta 3 | https://youtu.be/..."></textarea>
     </div>
 
     <!-- ======================
-         PUBLIC
+         PUBLIC (NESSUN LOGIN)
     ======================= -->
     <div id="appPublic" class="hide">
       <div class="publicWrap">
@@ -922,7 +918,7 @@ const db = firebase.firestore();
 const BRAND = {
   name: "Freestyle Aerial Competition",
   subtitle: "Sistema votazioni 2026",
- logoUrl: "/assets/logo.png" // sostituibile
+  logoUrl: "/assets/logo.png" // sostituibile
 };
 
 /* ======================
@@ -977,6 +973,8 @@ const adminMsg = document.getElementById("adminMsg");
 
 const btnStartDay = document.getElementById("btnStartDay");
 const btnStopDay = document.getElementById("btnStopDay");
+const btnPauseDay = document.getElementById("btnPauseDay");
+const btnResumeDay = document.getElementById("btnResumeDay");
 const btnFreeze = document.getElementById("btnFreeze");
 const btnUnfreeze = document.getElementById("btnUnfreeze");
 
@@ -987,6 +985,8 @@ const btnActivateCategory = document.getElementById("btnActivateCategory");
 const btnCloseCategory = document.getElementById("btnCloseCategory");
 const btnPrevAth = document.getElementById("btnPrevAth");
 const btnNextAth = document.getElementById("btnNextAth");
+
+const athRO_admin = document.getElementById("athRO_admin");
 
 const fixAth = document.getElementById("fixAth");
 const fixVideo = document.getElementById("fixVideo");
@@ -1054,13 +1054,7 @@ function getPerfFinal(perf){
   const votedCount = totals.length;
   const finalAvg = votedCount === 3 ? (sum(totals) / 3) : null;
 
-  return {
-    votedCount,
-    t1,
-    t2,
-    t3,
-    finalAvg
-  };
+  return { votedCount, t1, t2, t3, finalAvg };
 }
 
 function ctx2d(canvas){
@@ -1182,16 +1176,30 @@ function roleKey(v){
   return v==="J1"?"j1":(v==="J2"?"j2":(v==="J3"?"j3":null));
 }
 
+/* ======================
+   REFS (Firestore)
+====================== */
 function rosterDocId(session, category){ return safeId(`${session}__${category}`); }
 function rosterRef(session, category){ return db.collection("rosters").doc(rosterDocId(session, category)); }
 function stateRef(session){ return db.collection("state").doc(String(session)); }
 function metaRef(){ return db.collection("meta").doc("global"); }
-function standingsRef(session, category){ return db.collection("standings").doc(`${session}__${category}`); }
 
 function perfId(session, category, startNum){ return safeId(`${session}__${category}__${startNum}`); }
 function perfRef(session, category, startNum){ return db.collection("performances").doc(perfId(session, category, startNum)); }
 
-// Public device lock
+/**
+ * Public votes:
+ * - docId include deviceId => 1 voto per atleta per device (nessun overwrite tra device)
+ */
+function voteDocId(perfIdStr, deviceId){ return safeId(`${perfIdStr}__${deviceId}`); }
+function voteDocRef(perfIdStr){
+  const deviceId = getDeviceId();
+  return db.collection("public_votes").doc(voteDocId(perfIdStr, deviceId));
+}
+
+/* ======================
+   Public device lock (no login)
+====================== */
 const LS_DEVICE_ID = "fac_pub_device_v3";
 function getDeviceId(){
   let id = localStorage.getItem(LS_DEVICE_ID);
@@ -1203,7 +1211,9 @@ function getDeviceId(){
 }
 function localVotedKey(perfIdStr){ return `fac_voted_${perfIdStr}`; }
 
-// Video: YouTube embed
+/* ======================
+   VIDEO: YouTube embed
+====================== */
 function toYouTubeEmbed(url){
   if (!url) return null;
   const u = String(url).trim();
@@ -1217,7 +1227,7 @@ function toYouTubeEmbed(url){
 }
 
 /* ======================
-   PUBLIC MODE / MAIN MODE
+   VIEW SWITCH
 ====================== */
 function showPublicMode(){
   appMain.classList.add("hide");
@@ -1228,70 +1238,8 @@ function showMainMode(){
   appMain.classList.remove("hide");
 }
 
-function lockRoleAndSessionForNonAdmin(){
-  const r = ruolo.value;
-  if (["J1","J2","J3","PUBLIC"].includes(r)){
-    ruolo.disabled = true;
-    sessione.disabled = true;
-    roleLockHint.textContent = "Ruolo e giornata gestiti dall’Admin";
-  } else if (r === "ADMIN"){
-    ruolo.disabled = false;
-    if (!forcedSession){
-      sessione.disabled = false;
-      roleLockHint.textContent = "";
-    }
-  }
-}
-
-function refreshMode(){
-  who.textContent = ruolo.value;
-  lockRoleAndSessionForNonAdmin();
-  const judgeRolePill = document.getElementById("judgeRolePill");
-  if (judgeRolePill){
-    if (isJudge()){
-      judgeRolePill.textContent = ruolo.value;
-    } else if (isAdmin()){
-      judgeRolePill.textContent = "Admin";
-    } else if (isPublic()){
-      judgeRolePill.textContent = "Pubblico";
-    } else {
-      judgeRolePill.textContent = "—";
-    }
-  }
-  if (isPublic()) showPublicMode();
-  else showMainMode();
-
-  if (isAdmin()){
-    if (isAdminUnlocked()) unlockAdmin();
-    else lockAdmin();
-  } else {
-    pinBox.classList.add("hide");
-    adminBody.classList.add("hide");
-  }
-}
-
 /* ======================
-   DARK STAGE TOGGLE (LOCAL)
-====================== */
-const THEME_KEY = "fac_theme";
-function applyTheme(theme){
-  if (theme === "dark"){
-    document.body.classList.add("dark");
-    toggleThemeBtn.textContent = "☀️ Light Mode";
-  } else {
-    document.body.classList.remove("dark");
-    toggleThemeBtn.textContent = "🌙 Dark Stage";
-  }
-  localStorage.setItem(THEME_KEY, theme);
-}
-applyTheme(localStorage.getItem(THEME_KEY) || "light");
-toggleThemeBtn.onclick = () => {
-  const next = document.body.classList.contains("dark") ? "light" : "dark";
-  applyTheme(next);
-};
-
-/* ======================
-   RULES
+   RULES / CONFIG
 ====================== */
 const ADMIN_PIN = "2478";
 const CRITERI = ["Coreografia","Tecnica","Triks","Immagine","Presenza scenica","Performance generale"];
@@ -1318,7 +1266,7 @@ const CATEGORY_ORDER = [
 ];
 
 /* ======================
-   ADMIN AUTH
+   ROLE / ADMIN AUTH
 ====================== */
 const LS_ADMIN_OK = "fac_admin_ok_v3";
 const isAdmin = () => ruolo.value === "ADMIN";
@@ -1362,6 +1310,26 @@ function hideMsg(el){
 }
 
 /* ======================
+   DARK STAGE TOGGLE (LOCAL)
+====================== */
+const THEME_KEY = "fac_theme";
+function applyTheme(theme){
+  if (theme === "dark"){
+    document.body.classList.add("dark");
+    toggleThemeBtn.textContent = "☀️ Light Mode";
+  } else {
+    document.body.classList.remove("dark");
+    toggleThemeBtn.textContent = "🌙 Dark Stage";
+  }
+  localStorage.setItem(THEME_KEY, theme);
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "light");
+toggleThemeBtn.onclick = () => {
+  const next = document.body.classList.contains("dark") ? "light" : "dark";
+  applyTheme(next);
+};
+
+/* ======================
    CRITERIA BUILD
 ====================== */
 let critInputs = [];
@@ -1370,16 +1338,16 @@ function buildCriteria(){
   critInputs = [];
   CRITERI.forEach((c,i) => {
     const row = document.createElement("div");
-    row.className = "critRow";        // 👈 classe per il CSS
+    row.className = "critRow";
 
     const col1 = document.createElement("div");
-    col1.className = "critLabelCol";  // 👈 classe per etichetta
+    col1.className = "critLabelCol";
     const lbl = document.createElement("label");
     lbl.textContent = c;
     col1.appendChild(lbl);
 
     const col2 = document.createElement("div");
-    col2.className = "critScoreCol";  // 👈 classe per input punteggio
+    col2.className = "critScoreCol";
     col2.style.minWidth = "120px";
     const inp = document.createElement("input");
     inp.type = "number";
@@ -1435,15 +1403,58 @@ function fillCategorySelect(sel){
 fillCategorySelect(adminCategory);
 fillCategorySelect(rosterCategory);
 
-// preview roster in Admin when selecting a category
 adminCategory.onchange = () => refreshAdminRosterPreview();
+
+/* ======================
+   MODE / LOCK ROLE & SESSION
+====================== */
+let forcedSession = null; // sessione imposta dall’Admin tramite Firestore
+
+function lockRoleAndSessionForNonAdmin(){
+  const r = ruolo.value;
+  if (["J1","J2","J3","PUBLIC"].includes(r)){
+    ruolo.disabled = true;
+    sessione.disabled = true;
+    roleLockHint.textContent = "Ruolo e giornata gestiti dall’Admin";
+  } else if (r === "ADMIN"){
+    ruolo.disabled = false;
+    if (!forcedSession){
+      sessione.disabled = false;
+      roleLockHint.textContent = "";
+    }
+  }
+}
+
+function refreshMode(){
+  who.textContent = ruolo.value;
+  lockRoleAndSessionForNonAdmin();
+
+  const judgeRolePill = document.getElementById("judgeRolePill");
+  if (judgeRolePill){
+    if (isJudge()) judgeRolePill.textContent = ruolo.value;
+    else if (isAdmin()) judgeRolePill.textContent = "Admin";
+    else if (isPublic()) judgeRolePill.textContent = "Pubblico";
+    else judgeRolePill.textContent = "—";
+  }
+
+  // Pubblico sempre libero: nessun PIN, nessun login
+  if (isPublic()) showPublicMode();
+  else showMainMode();
+
+  if (isAdmin()){
+    if (isAdminUnlocked()) unlockAdmin();
+    else lockAdmin();
+  } else {
+    pinBox.classList.add("hide");
+    adminBody.classList.add("hide");
+  }
+}
 
 /* ======================
    STATE + PERFORMANCE (CORE)
 ====================== */
-let unsubState = null;let unsubMeta = null;
-let forcedSession = null; // sessione imposta dall'Admin tramite Firestore
-
+let unsubState = null;
+let unsubMeta = null;
 let currentState = null;
 
 let unsubPerf = null;
@@ -1452,6 +1463,7 @@ let unsubAdminMonitor = null;
 let lastAutoPerfKey = null;
 
 let lastPerfDoc = null;
+
 function listenMeta(){
   if (unsubMeta) unsubMeta();
   unsubMeta = metaRef().onSnapshot((snap) => {
@@ -1496,17 +1508,23 @@ function listenState(){
   });
 }
 
-function listenAdminAutoAdvance(){
-  // Chiude eventuale listener precedente
-  if (unsubAdminPerf){ unsubAdminPerf(); unsubAdminPerf = null; }
+function isPaused(st){ return st?.paused === true; }
+function isFrozen(st){ return st?.locked === true; }
+function isCategoryUnlocked(st){
+  const list = Array.isArray(st?.unlockedCategories) ? st.unlockedCategories : [];
+  const cat = String(st?.categoryName || "");
+  if (!cat) return false;
+  return list.includes(cat);
+}
 
-  // Solo Admin sbloccato
+function listenAdminAutoAdvance(){
+  if (unsubAdminPerf){ unsubAdminPerf(); unsubAdminPerf = null; }
   if (!isAdmin() || !isAdminUnlocked()) return;
 
-  // Serve una gara e una categoria attiva, e non deve essere bloccata
   if (!currentState || currentState.active !== true) return;
   if (currentState.categoryActive !== true) return;
-  if (currentState.locked === true) return;
+  if (isFrozen(currentState)) return;
+  if (isPaused(currentState)) return;
 
   const cat = currentState.categoryName;
   const st = currentState.start;
@@ -1522,29 +1540,24 @@ function listenAdminAutoAdvance(){
     const ok2 = j.j2?.submitted === true;
     const ok3 = j.j3?.submitted === true;
 
-    // Se non sono 3/3, non facciamo nulla
     if (!(ok1 && ok2 && ok3)) return;
 
-    // Evita doppio passaggio sullo stesso atleta
     const perfKey = `${sessione.value}__${cat}__${st}`;
     if (lastAutoPerfKey === perfKey) return;
     lastAutoPerfKey = perfKey;
 
-    // Piccola pausa (anti-rimbalzo)
     setTimeout(async () => {
-      // Ricontrollo stato attuale prima di passare
       const stSnap = await stateRef(sessione.value).get();
       const sdata = stSnap.exists ? stSnap.data() : null;
 
       if (!sdata) return;
       if (sdata.locked === true) return;
+      if (sdata.paused === true) return;
       if (sdata.categoryActive !== true) return;
 
-      // Se nel frattempo Admin ha cambiato atleta/categoria, non facciamo nulla
       if (sdata.categoryName !== cat) return;
       if (String(sdata.start) !== String(st)) return;
 
-      // PASSA AL SUCCESSIVO
       await adminStepAthlete(+1);
     }, 600);
   });
@@ -1553,12 +1566,17 @@ function listenAdminAutoAdvance(){
 function refreshFromState(){
   const st = currentState;
 
+  // Sync state badge
+  const frozen = isFrozen(st);
+  const paused = isPaused(st);
+
   if (!st || st.active !== true){
     setStateBadge("warn", "In attesa");
     stateLine.textContent = "Gara non attiva.";
     freezeBadge.classList.add("hide");
 
     catRO.value = ""; startRO.value = ""; athRO.value = "";
+    if (athRO_admin) athRO_admin.value = "";
     clearVideo();
 
     if (isJudge()){
@@ -1572,34 +1590,46 @@ function refreshFromState(){
     if (isAdmin() && isAdminUnlocked()){
       btnUnfreeze.classList.add("hide");
       btnFreeze.classList.remove("hide");
+      btnResumeDay.classList.add("hide");
+      btnPauseDay.classList.remove("hide");
     }
     return;
   }
 
-  const frozen = st.locked === true;
   freezeBadge.classList.toggle("hide", !frozen);
 
-  setStateBadge(frozen ? "bad" : "ok", frozen ? "Bloccata" : "Attiva");
+  // Badge gara: priorità PAUSA > BLOCCO > ATTIVA
+  if (paused) setStateBadge("warn", "Pausa");
+  else setStateBadge(frozen ? "bad" : "ok", frozen ? "Bloccata" : "Attiva");
 
   if (st.categoryActive !== true){
-    stateLine.textContent = "In attesa prossima categoria…";
+    stateLine.textContent = paused ? "Gara in pausa." : "In attesa prossima categoria…";
     catRO.value = ""; startRO.value = ""; athRO.value = "";
+    if (athRO_admin) athRO_admin.value = "";
     clearVideo();
 
     if (isJudge()){
       setJudgeEnabled(false);
-      showMsg(judgeMsg, "warn", frozen ? "Votazioni bloccate dall’Admin." : "In attesa attivazione categoria.");
+      const msg = paused ? "Gara in pausa." : (frozen ? "Votazioni bloccate dall’Admin." : "In attesa attivazione categoria.");
+      showMsg(judgeMsg, paused ? "warn" : (frozen ? "bad" : "warn"), msg);
     }
     if (isPublic()){
-      applyPublic(null, frozen ? "Votazioni momentaneamente bloccate." : "In attesa prossima categoria…");
+      const msg = paused ? "Gara in pausa." : (frozen ? "Votazioni momentaneamente bloccate." : "In attesa prossima categoria…");
+      applyPublic(null, msg);
     }
 
     if (isAdmin() && isAdminUnlocked()){
       btnUnfreeze.classList.toggle("hide", !frozen);
       btnFreeze.classList.toggle("hide", frozen);
+      btnResumeDay.classList.toggle("hide", !paused);
+      btnPauseDay.classList.toggle("hide", paused);
     }
     return;
   }
+
+  // categoria attiva
+  const unlockedOk = isCategoryUnlocked(st); // se manca, blocca giudici/pubblico
+  const canVoteGlobal = (!frozen && !paused && unlockedOk);
 
   stateLine.textContent = `${st.categoryName || "—"} • Start ${st.start || "—"} • ${st.athleteName || "—"}`;
   if (isAdmin() && adminMonNow){ adminMonNow.textContent = "Atleta: " + (st.athleteName || "—"); }
@@ -1607,23 +1637,31 @@ function refreshFromState(){
   catRO.value = st.categoryName || "";
   startRO.value = st.start || "";
   athRO.value = st.athleteName || "";
+  if (athRO_admin) athRO_admin.value = st.athleteName || "";
 
   if (st.videoUrl) renderVideo(st.videoUrl);
   else clearVideo();
 
   if (isJudge()){
-    if (frozen){
+    if (!unlockedOk){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", "Categoria non sbloccata dall’Admin.");
+    } else if (paused){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", "Gara in pausa.");
+    } else if (frozen){
       setJudgeEnabled(false);
       showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
     } else {
-      // enable depends on performance submitted status; perf listener will manage
       hideMsg(judgeMsg);
     }
   }
 
   if (isPublic()){
-    if (frozen){
-      applyPublic(null, "Votazioni momentaneamente bloccate.");
+    if (!unlockedOk){
+      applyPublic(null, "Categoria non sbloccata.");
+    } else if (!canVoteGlobal){
+      applyPublic(null, paused ? "Gara in pausa." : "Votazioni momentaneamente bloccate.");
     } else {
       applyPublic(st, null);
     }
@@ -1632,9 +1670,10 @@ function refreshFromState(){
   if (isAdmin() && isAdminUnlocked()){
     btnUnfreeze.classList.toggle("hide", !frozen);
     btnFreeze.classList.toggle("hide", frozen);
+    btnResumeDay.classList.toggle("hide", !paused);
+    btnPauseDay.classList.toggle("hide", paused);
   }
 
-  // ensure judges follow the current athlete
   if (isJudge()) listenPerformanceForJudges();
 }
 
@@ -1670,21 +1709,34 @@ function listenPerformanceForJudges(){
       return;
     }
 
-    const j = d.judges || {};
-    const my = j[rk];
-
     const frozen = currentState?.locked === true;
+    const paused = currentState?.paused === true;
+    const unlockedOk = isCategoryUnlocked(currentState);
+
+    if (paused){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", "Gara in pausa.");
+      return;
+    }
+    if (!unlockedOk){
+      setJudgeEnabled(false);
+      showMsg(judgeMsg, "warn", "Categoria non sbloccata dall’Admin.");
+      return;
+    }
     if (frozen){
       setJudgeEnabled(false);
       showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
       return;
     }
 
+    const j = d.judges || {};
+    const my = j[rk];
+
     if (my?.submitted){
       setJudgeEnabled(false);
       submittedBadge.style.display = "inline-flex";
       showMsg(judgeMsg, "ok", "Hai già inviato: voti definitivi.");
-      // aggiorna campi con quello che avevi mandato
+
       if (Array.isArray(my.scores)){
         critInputs.forEach((inp,idx)=>{
           inp.value = my.scores[idx] != null ? my.scores[idx] : 0;
@@ -1696,12 +1748,9 @@ function listenPerformanceForJudges(){
       return;
     }
 
-    // Non ancora inviato
     submittedBadge.style.display = "none";
     setJudgeEnabled(true);
     hideMsg(judgeMsg);
-
-    // non sovrascriviamo se il giudice sta già digitando
     recalc();
   });
 }
@@ -1747,9 +1796,7 @@ function parseRosterText(raw){
     const parts = trimmed.split("|");
     const name = parts[0].trim();
     const videoUrl = (parts[1]||"").trim();
-    if (name){
-      out.push({ name, videoUrl });
-    }
+    if (name) out.push({ name, videoUrl });
   }
   return out;
 }
@@ -1812,7 +1859,10 @@ async function adminStartDay(){
   const sess = sessione.value;
   await stateRef(sess).set({
     active: true,
+    paused: false,
     locked: false,
+    unlockedCategories: [],
+
     categoryActive: false,
     categoryIndex: null,
     categoryName: null,
@@ -1821,6 +1871,7 @@ async function adminStartDay(){
     videoUrl: null,
     updatedAt: Date.now()
   }, { merge:true });
+
   showMsg(adminMsg, "ok", "Giornata attivata. Ora seleziona una categoria e avviala.");
 }
 
@@ -1828,11 +1879,21 @@ async function adminStopDay(){
   const sess = sessione.value;
   await stateRef(sess).set({
     active: false,
+    paused: false,
     categoryActive: false,
     locked: false,
     updatedAt: Date.now()
   }, { merge:true });
   showMsg(adminMsg, "warn", "Giornata fermata.");
+}
+
+async function adminSetPaused(on){
+  const sess = sessione.value;
+  await stateRef(sess).set({
+    paused: !!on,
+    updatedAt: Date.now()
+  }, { merge:true });
+  showMsg(adminMsg, on ? "warn" : "ok", on ? "Gara in pausa." : "Gara ripresa.");
 }
 
 async function adminFreeze(on){
@@ -1863,15 +1924,22 @@ async function adminActivateCategory(){
   const athlete = first.name;
   const videoUrl = first.videoUrl || "";
 
+  // ✅ sblocca automaticamente la categoria (senza duplicati)
+  const arrayUnion = firebase.firestore.FieldValue.arrayUnion;
+
   await stateRef(sess).set({
     active: true,
+    paused: false,
     locked: false,
+
     categoryActive: true,
     categoryIndex: idx,
     categoryName: catName,
     start: "1",
     athleteName: athlete,
     videoUrl: videoUrl,
+
+    unlockedCategories: arrayUnion(catName),
     updatedAt: Date.now()
   }, { merge:true });
 
@@ -1900,6 +1968,10 @@ async function adminStepAthlete(delta){
 
   if (st.active !== true){
     showMsg(adminMsg, "bad", "Giornata non attiva.");
+    return;
+  }
+  if (st.paused === true){
+    showMsg(adminMsg, "warn", "Gara in pausa: riprendi prima di avanzare.");
     return;
   }
   if (st.categoryActive !== true){
@@ -1991,8 +2063,13 @@ async function adminFixVideoUrl(){
   fixVideo.value = "";
 }
 
+/* Admin button bindings */
 btnStartDay.onclick = adminStartDay;
 btnStopDay.onclick = adminStopDay;
+
+btnPauseDay.onclick = () => adminSetPaused(true);
+btnResumeDay.onclick = () => adminSetPaused(false);
+
 btnFreeze.onclick = () => adminFreeze(true);
 btnUnfreeze.onclick = () => adminFreeze(false);
 
@@ -2004,6 +2081,9 @@ btnNextAth.onclick = () => adminStepAthlete(+1);
 btnFixAth.onclick = adminFixAthleteName;
 btnFixVideo.onclick = adminFixVideoUrl;
 
+/* ======================
+   ADMIN MONITOR
+====================== */
 function clearAdminMonitor(){
   if (adminMonCat) adminMonCat.textContent = "Categoria: —";
   if (adminMonNow) adminMonNow.textContent = "Atleta: —";
@@ -2033,7 +2113,6 @@ function updateAdminMonitor(perfDocs){
   }).join("");
   adminMonBody.innerHTML = rows || "";
 
-  // grafici
   let c0=0,c1=0,c2=0,c3=0;
   const bars = [];
   const line = [];
@@ -2109,6 +2188,14 @@ btnSend.onclick = async () => {
     showMsg(judgeMsg, "warn", "In attesa attivazione Admin.");
     return;
   }
+  if (currentState.paused === true){
+    showMsg(judgeMsg, "warn", "Gara in pausa.");
+    return;
+  }
+  if (!isCategoryUnlocked(currentState)){
+    showMsg(judgeMsg, "warn", "Categoria non sbloccata dall’Admin.");
+    return;
+  }
   if (currentState.locked === true){
     showMsg(judgeMsg, "bad", "Votazioni bloccate dall’Admin.");
     return;
@@ -2162,7 +2249,7 @@ btnClear.onclick = () => {
 };
 
 /* ======================
-   PUBLIC
+   PUBLIC (no login)
 ====================== */
 function showPub(type, txt){
   pubMsg.classList.remove("hide","ok","bad","warn");
@@ -2193,8 +2280,24 @@ function applyPublic(st, forcedMessage){
     return;
   }
 
+  if (st.paused === true){
+    pubMeta.textContent = "Gara in pausa.";
+    pubAthlete.textContent = "—";
+    pubVoteBtn.disabled = true;
+    hidePub();
+    return;
+  }
+
   if (st.locked === true){
     pubMeta.textContent = "Votazioni momentaneamente bloccate.";
+    pubAthlete.textContent = "—";
+    pubVoteBtn.disabled = true;
+    hidePub();
+    return;
+  }
+
+  if (!isCategoryUnlocked(st)){
+    pubMeta.textContent = "Categoria non sbloccata.";
     pubAthlete.textContent = "—";
     pubVoteBtn.disabled = true;
     hidePub();
@@ -2218,6 +2321,14 @@ function applyPublic(st, forcedMessage){
 async function sendPublicVote(){
   if (!currentState || currentState.active !== true || currentState.categoryActive !== true){
     showPub("warn", "In attesa attivazione categoria.");
+    return;
+  }
+  if (currentState.paused === true){
+    showPub("warn", "Gara in pausa.");
+    return;
+  }
+  if (!isCategoryUnlocked(currentState)){
+    showPub("warn", "Categoria non sbloccata.");
     return;
   }
   if (currentState.locked === true){
@@ -2244,15 +2355,13 @@ async function sendPublicVote(){
 
   const snap = await docRef.get();
   if (snap.exists){
-    const d = snap.data() || {};
-    if (d.deviceId === getDeviceId()){
-      showPub("warn", "Hai già votato questo atleta da questo dispositivo.");
-      localStorage.setItem(localKey,"1");
-      return;
-    }
+    showPub("warn", "Hai già votato questo atleta da questo dispositivo.");
+    localStorage.setItem(localKey,"1");
+    return;
   }
 
   const val = parseInt(pubSlider.value,10) || 5;
+
   await docRef.set({
     perfId: perfIdStr,
     sessione: sess,
@@ -2268,18 +2377,6 @@ async function sendPublicVote(){
 }
 
 pubVoteBtn.onclick = sendPublicVote;
-
-/* ======================
-   MODE SWITCH
-====================== */
-function showPublicMode(){
-  appMain.classList.add("hide");
-  appPublic.classList.remove("hide");
-}
-function showMainMode(){
-  appPublic.classList.add("hide");
-  appMain.classList.remove("hide");
-}
 
 /* ======================
    INIT
@@ -2315,16 +2412,13 @@ window.addEventListener("offline", ()=> envBadge.textContent = "Offline");
 /* ======================
    FORCE ROLE FROM URL
 ====================== */
-let forcedRole = null;
-let forcedSessionFromUrl = null;
-
-forcedRole = getUrlRole();
+let forcedRole = getUrlRole();
 if (forcedRole){
   ruolo.value = forcedRole;
   ruolo.disabled = true;
   roleLockHint.textContent = "Ruolo bloccato dal link";
   lockRoleAndSessionForNonAdmin();
-  refreshMode();              // 👈 AGGIUNTA
+  refreshMode();
   if (isJudge()) listenPerformanceForJudges();
   if (isPublic()) showPublicMode();
 }

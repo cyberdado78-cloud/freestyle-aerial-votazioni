@@ -1186,7 +1186,17 @@ function metaRef(){ return db.collection("meta").doc("global"); }
 
 function perfId(session, category, startNum){ return safeId(`${session}__${category}__${startNum}`); }
 function perfRef(session, category, startNum){ return db.collection("performances").doc(perfId(session, category, startNum)); }
+// ======================
+// PUBLIC VOTES
+// ======================
+function pubVoteId(perfIdStr, deviceId){
+  return safeId(`${perfIdStr}__${deviceId}`);
+}
 
+function voteDocRef(perfIdStr){
+  const deviceId = getDeviceId();
+  return db.collection("publicVotes").doc(pubVoteId(perfIdStr, deviceId));
+}
 /**
  * Public votes:
  * - docId include deviceId => 1 voto per atleta per device (nessun overwrite tra device)

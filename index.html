@@ -640,6 +640,7 @@
               <div class="row" style="margin-top:8px;">
                 <button id="btnFreeze">Blocca votazioni</button>
                 <button id="btnUnfreeze" class="hide">Sblocca votazioni</button>
+                <button id="btnUnlockNextCat" class="btnGhost">Sblocca categoria successiva</button>
               </div>
 
               <div class="msg warn" style="margin-top:10px">
@@ -977,6 +978,7 @@ const btnPauseDay = document.getElementById("btnPauseDay");
 const btnResumeDay = document.getElementById("btnResumeDay");
 const btnFreeze = document.getElementById("btnFreeze");
 const btnUnfreeze = document.getElementById("btnUnfreeze");
+const btnUnlockNextCat = document.getElementById("btnUnlockNextCat");  
 
 const adminCategory = document.getElementById("adminCategory");
 const adminRosterCount = document.getElementById("adminRosterCount");
@@ -2082,6 +2084,7 @@ btnResumeDay.onclick = () => adminSetPaused(false);
 
 btnFreeze.onclick = () => adminFreeze(true);
 btnUnfreeze.onclick = () => adminFreeze(false);
+btnUnlockNextCat.onclick = adminUnlockNextCategory;  
 
 btnActivateCategory.onclick = adminActivateCategory;
 btnCloseCategory.onclick = adminCloseCategory;

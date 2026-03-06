@@ -646,6 +646,13 @@
               <div class="msg warn" style="margin-top:10px">
                 L’Admin attiva <b>categoria per categoria</b> nell’ordine prestabilito. Senza attivazione: giudici e pubblico non votano.
               </div>
+              <div class="card" style="margin-top:12px">
+
+<h3>Stato categorie</h3>
+
+<div id="catStatusList" style="font-size:13px;line-height:1.6"></div>
+
+</div>
 
               <div class="divider"></div>
 
@@ -1002,7 +1009,8 @@ const adminMonBody = document.getElementById("adminMonBody");
 const adminPie = document.getElementById("adminPie");
 const adminBars = document.getElementById("adminBars");
 const adminLine = document.getElementById("adminLine");
-
+const catStatusList = document.getElementById("catStatusList");
+  
 const rosterSession = document.getElementById("rosterSession");
 const rosterCategory = document.getElementById("rosterCategory");
 const rosterText = document.getElementById("rosterText");
@@ -1576,6 +1584,7 @@ function listenAdminAutoAdvance(){
 }
 
 function refreshFromState(){
+  renderCategoryStatus();
   const st = currentState;
 
   // Sync state badge
@@ -2435,7 +2444,65 @@ if (forcedRole){
   if (isJudge()) listenPerformanceForJudges();
   if (isPublic()) showPublicMode();
 }
+/* ======================
+   SBLOCCA CATEGORIA SUCCESSIVA
+====================== */
 
+async function adminUnlockNextCategory(){
+
+  const sess = sessione.value;
+
+  const snap = await stateRef(sess).get();
+  if(!snap.exists) return;
+
+  const st = snap.data();
+
+  const currentIdx =
+    st.categoryIndex ?? CATEGORY_ORDER.indexOf(st.categoryName);
+
+  const nextCat = CATEGORY_ORDER[currentIdx + 1];
+
+  if(!nextCat){
+    showMsg(adminMsg,"warn","Non esiste una categoria successiva.");
+    return;
+  }
+
+  await stateRef(sess).set({
+    unlockedCategories:
+      firebase.firestore.FieldValue.arrayUnion(nextCat),
+    updatedAt: Date.now()
+  },{merge:true});
+
+  showMsg(adminMsg,"ok","Categoria sbloccata: " + nextCat);
+}
+  function renderCategoryStatus(){
+
+  if(!catStatusList) return;
+
+  const st = currentState || {};
+
+  const unlocked = st.unlockedCategories || [];
+
+  let html = "";
+
+  CATEGORY_ORDER.forEach((cat,i)=>{
+
+    let icon = "🔴";
+
+    if(st.categoryName === cat && st.categoryActive){
+      icon = "🟢";
+    }
+    else if(unlocked.includes(cat)){
+      icon = "🟡";
+    }
+
+    html += `<div>${icon} ${cat}</div>`;
+
+  });
+
+  catStatusList.innerHTML = html;
+
+}
 /* ======================
    APPLY INITIAL RECALC
 ====================== */

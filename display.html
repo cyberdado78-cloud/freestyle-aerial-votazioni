@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FAC 2026 – Schermo Gara</title>
+<style>
+  body{margin:0;font-family:system-ui;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh}
+  .wrap{max-width:1200px;width:100%;padding:40px;text-align:center}
+  .badge{display:inline-block;background:#d4af37;color:#111;padding:6px 14px;border-radius:20px;font-weight:700}
+  h1{font-size:56px;margin:18px 0 6px}
+  .meta{font-size:24px;opacity:.85}
+  .score{font-size:120px;font-weight:900;margin:30px 0}
+  .grid{display:flex;gap:18px;justify-content:center}
+  .card{background:#1b1b1b;border-radius:14px;padding:16px 20px;min-width:160px}
+  .lbl{font-size:14px;opacity:.7}
+  .val{font-size:34px;font-weight:800}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="badge">Freestyle Aerial Competition – Live</div>
+  <h1 id="ath">—</h1>
+  <div class="meta" id="meta">In attesa…</div>
+
+  <div class="score" id="avg">—</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="lbl">Giudice 1</div>
+      <div class="val" id="j1">—</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Giudice 2</div>
+      <div class="val" id="j2">—</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Giudice 3</div>
+      <div class="val" id="j3">—</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyB-2_KfVwjnIoS8yo__k4FZBYMQ5xN6wR0",
+  authDomain: "votazioni-b93a0.firebaseapp.com",
+  projectId: "votazioni-b93a0",
+  storageBucket: "votazioni-b93a0.firebasestorage.app",
+  messagingSenderId: "597305511112",
+  appId: "1:597305511112:web:5eab508957aec0fe0969fd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const ath = document.getElementById("ath");
+const meta = document.getElementById("meta");
+const avg = document.getElementById("avg");
+const j1 = document.getElementById("j1");
+const j2 = document.getElementById("j2");
+const j3 = document.getElementById("j3");
+
+function clamp(x,min,max){return Math.max(min,Math.min(max,x))}
+function sum(a){return a.reduce((p,c)=>p+c,0)}
+
+function calc(j){
+ if(!j||!Array.isArray(j.scores))return null;
+ const s=j.scores.map(x=>clamp(parseFloat(x)||0,0,10));
+ const p=clamp(parseFloat(j.penalty||0),0,100);
+ return sum(s)-p;
+}
+
+function perfId(session,cat,start){
+ return `${session}__${cat}__${start}`.replaceAll(" ","_");
+}
+
+function perfRef(session,cat,start){
+ return db.collection("performances").doc(perfId(session,cat,start));
+}
+
+function stateRef(session){
+ return db.collection("state").doc(session);
+}
+
+const SESSION="2026-04-18_CERCHIO";
+
+stateRef(SESSION).onSnapshot(s=>{
+ const st=s.data();
+ if(!st||!st.categoryActive){
+   ath.textContent="—";
+   meta.textContent="In attesa…";
+   avg.textContent="—";
+   return;
+ }
+
+ ath.textContent=st.athleteName||"—";
+ meta.textContent=`${st.categoryName} • Start ${st.start}`;
+
+ const ref=perfRef(SESSION,st.categoryName,st.start);
+
+ ref.onSnapshot(p=>{
+   const d=p.data()||{};
+   const j=d.judges||{};
+
+   const t1=calc(j.j1);
+   const t2=calc(j.j2);
+   const t3=calc(j.j3);
+
+   j1.textContent=t1? t1.toFixed(1):"—";
+   j2.textContent=t2? t2.toFixed(1):"—";
+   j3.textContent=t3? t3.toFixed(1):"—";
+
+   const arr=[t1,t2,t3].filter(x=>x!=null);
+   avg.textContent=arr.length? (sum(arr)/arr.length).toFixed(2):"—";
+ });
+
+});
+</script>
+</body>
+</html>

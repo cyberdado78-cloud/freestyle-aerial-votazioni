@@ -33,6 +33,20 @@
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
   }
 
+  function hexToRgb(value, fallback) {
+    const match = String(value || "").match(/^#([0-9a-f]{6})$/i);
+    const hex = match ? match[1] : fallback.replace("#", "");
+    return `${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}`;
+  }
+
+  function applyBrandTheme(primary = "#c1121f", accent = "#d4af37") {
+    const root = document.documentElement.style;
+    root.setProperty("--primary", primary);
+    root.setProperty("--accent", accent);
+    root.setProperty("--primary-rgb", hexToRgb(primary, "#c1121f"));
+    root.setProperty("--accent-rgb", hexToRgb(accent, "#d4af37"));
+  }
+
   function loadPlatform() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -351,6 +365,7 @@
     $("#trialDays").value = org.subscription.trialDays;
     $("#primaryColor").value = org.brand.primaryColor;
     $("#accentColor").value = org.brand.accentColor;
+    applyBrandTheme(org.brand.primaryColor, org.brand.accentColor);
     $("#logoUrl").value = org.brand.logoUrl || "";
     logoDataUrl = org.brand.logoDataUrl || "";
     $("#logoPreview").innerHTML = logoDataUrl ? `<img src="${logoDataUrl}" alt="Anteprima logo">` : "<span>Nessun logo caricato</span>";
@@ -389,6 +404,7 @@
     $("#trialDays").value = 14;
     $("#primaryColor").value = "#c1121f";
     $("#accentColor").value = "#d4af37";
+    applyBrandTheme("#c1121f", "#d4af37");
     $("#logoPreview").innerHTML = "<span>Nessun logo caricato</span>";
     $("#judgeCount").value = 3;
     $("#minimumJudges").value = 3;
@@ -426,8 +442,7 @@
 
   function showDashboard(organization) {
     const event = organization.events[0];
-    document.documentElement.style.setProperty("--primary", organization.brand.primaryColor || "#c1121f");
-    document.documentElement.style.setProperty("--accent", organization.brand.accentColor || "#d4af37");
+    applyBrandTheme(organization.brand.primaryColor, organization.brand.accentColor);
     $("main.layout").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
     $("#dashboardOrg").textContent = organization.name;
@@ -441,6 +456,7 @@
   }
 
   function showConfigurator() {
+    applyBrandTheme($("#primaryColor").value, $("#accentColor").value);
     $("#dashboard").classList.add("hidden");
     $("main.layout").classList.remove("hidden");
     window.location.hash = "configurazione";
@@ -576,6 +592,40 @@
     else if (event.scoring.aggregation === "median") { const sorted = [...values].sort((a, b) => a - b); const middle = Math.floor(sorted.length / 2); total = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2; }
     else total = values.reduce((sum, value) => sum + value, 0) / values.length;
     return { total, count: values.length, complete: values.length >= event.scoring.minimumJudges };
+  }
+
+  function completeDemoData(organization) {
+    const event = ensureEventData(organization.events[0]);
+    const demoJudges = [
+      ["Giudice Anna", "1111"], ["Giudice Marco", "2222"],
+      ["Giudice Laura", "3333"], ["Giudice Paolo", "4444"],
+      ["Giudice Sara", "5555"], ["Giudice Luca", "6666"]
+    ];
+    const usedCodes = new Set(event.judges.map(item => String(item.code)));
+    let demoIndex = 0;
+    while (event.judges.length < event.scoring.judgeCount) {
+      const preset = demoJudges[demoIndex];
+      const name = preset?.[0] || `Giudice ${demoIndex + 1}`;
+      let code = preset?.[1] || String(7000 + demoIndex + 1);
+      demoIndex += 1;
+      if (event.judges.some(item => item.name === name)) continue;
+      while (usedCodes.has(code)) code = String(Number(code) + 7);
+      usedCodes.add(code);
+      event.judges.push({ id: uid("judge"), name, language: "it", code, active: true });
+    }
+    if (!event.participants.length) {
+      const samples = [
+        ["Giulia Ferrari", "Aerial Dream Torino", 0, "Tessuti"],
+        ["Sofia Romano", "Volo Libero Milano", 0, "Cerchio"],
+        ["Martina Gallo", "Freestyle Academy", 1, "Tessuti"],
+        ["Aurora Conti", "Aria Studio Genova", 2, "Cerchio"],
+        ["Alice De Luca", "Freestyle Academy", 3, "Tessuti"],
+        ["Camilla Greco", "Sky Art Alessandria", 4, "Cerchio"]
+      ];
+      samples.forEach(([name, club, categoryIndex, discipline], index) => event.participants.push({ id: uid("participant"), name, club, categoryId: event.categories.length ? event.categories[categoryIndex % event.categories.length].id : "", discipline, order: index + 1, status: "registered" }));
+    }
+    saveRuntime(organization);
+    renderDashboardModule("overview", organization, `Dati demo completati: ${event.participants.length} atleti e ${event.judges.length}/${event.scoring.judgeCount} giudici pronti.`);
   }
 
   function aggregationLabel(aggregation) {
@@ -772,11 +822,11 @@
     $$(".athlete-report", $("#moduleContent")).forEach(button => button.addEventListener("click", () => openAthleteReport(organization, button.dataset.participant)));
   }
 
-  function renderDashboardModule(module, organization) {
+  function renderDashboardModule(module, organization, message = "") {
     const event = ensureEventData(organization.events[0]);
     const content = $("#moduleContent");
     if (module === "overview") {
-      content.innerHTML = `<div class="dash-stats">
+      content.innerHTML = `${message ? `<div class="demo-message"><span>✓</span>${escapeHtml(message)}</div>` : ""}<div class="dash-stats">
         <article class="dash-stat"><span>Partecipanti</span><strong>${event.participants.length}</strong><small>${event.participants.filter(item => item.status === "completed").length} esibizioni completate</small></article>
         <article class="dash-stat"><span>Categorie</span><strong>${event.categories.length}</strong><small>${escapeHtml(event.disciplines.join(" · "))}</small></article>
         <article class="dash-stat"><span>Giudici attivi</span><strong>${event.judges.filter(item => item.active).length}</strong><small>${event.scoring.judgeCount} previsti</small></article>
@@ -790,8 +840,10 @@
         <button class="quick-action" data-open-module="participants"><strong>Aggiungi partecipanti</strong><small>Manuale, CSV o foglio di calcolo</small></button>
         <button class="quick-action" data-open-module="judges"><strong>Configura giudici</strong><small>Ruoli, lingue e sostituzioni</small></button>
         <button class="quick-action" data-open-module="control"><strong>Apri prova regia</strong><small>Testa il flusso della competizione</small></button>
+        <button class="quick-action demo-action" data-complete-demo><strong>Completa dati demo</strong><small>Crea automaticamente i giudici mancanti e dati di prova</small></button>
       </div></article></div>`;
       $$('[data-open-module]', content).forEach(button => button.addEventListener("click", () => activateDashboardModule(button.dataset.openModule, organization)));
+      $("[data-complete-demo]", content).addEventListener("click", () => completeDemoData(organization));
       return;
     }
     if (module === "participants") return renderParticipants(organization);
@@ -822,6 +874,8 @@
   });
   $("#orgSlug").addEventListener("input", event => { event.target.dataset.edited = event.target.value ? "true" : ""; });
   $("#trialDays").addEventListener("input", updateTrialPreview);
+  $("#primaryColor").addEventListener("input", event => applyBrandTheme(event.target.value, $("#accentColor").value));
+  $("#accentColor").addEventListener("input", event => applyBrandTheme($("#primaryColor").value, event.target.value));
   $("#logoFile").addEventListener("change", event => readLogo(event.target.files[0]));
   $("#eventFiles").addEventListener("change", event => {
     const files = [...event.target.files];

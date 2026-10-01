@@ -22,6 +22,7 @@
   let editingOrganizationId = null;
   let logoDataUrl = "";
   let selectedEventFiles = [];
+  let controlRefreshTimer = null;
 
   function uid(prefix) {
     const random = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -68,14 +69,102 @@
     event.scores = Array.isArray(event.scores) ? event.scores : [];
     event.publicVotes = Array.isArray(event.publicVotes) ? event.publicVotes : [];
     event.resultsValidated = event.resultsValidated || {};
+    event.scoreHistory = Array.isArray(event.scoreHistory) ? event.scoreHistory : [];
+    event.roundHistory = Array.isArray(event.roundHistory) ? event.roundHistory : [];
+    event.rules = event.rules || { text: "", file: null };
+    event.rounds = event.rounds || { enabled: false, finalistsPerCategory: 3, qualificationLabel: "Eliminatorie", finalLabel: "Finale" };
     event.control = event.control || { currentParticipantId: null, status: "setup" };
+    event.control.mode = event.control.mode || "automatic";
+    event.control.repeatQueue = Array.isArray(event.control.repeatQueue) ? event.control.repeatQueue : [];
+    event.participants.forEach((participant, index) => {
+      participant.order = Number(participant.order) || index + 1;
+      participant.round = participant.round || "qualification";
+      participant.attempt = Number(participant.attempt) || 1;
+      participant.attachments = participant.attachments || {};
+    });
+    event.judges.forEach(judge => { judge.lastActivityAt = judge.lastActivityAt || null; });
     return event;
+  }
+
+  function formatBytes(bytes = 0) {
+    if (!bytes) return "0 KB";
+    if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function activeRound(event) {
+    return event.rounds.enabled && event.control.round === "final" ? "final" : "qualification";
+  }
+
+  function participantScores(event, participant) {
+    const round = participant.round || activeRound(event);
+    const attempt = Number(participant.attempt) || 1;
+    return event.scores.filter(item => item.participantId === participant.id && (item.round || "qualification") === round && Number(item.attempt || 1) === attempt);
+  }
+
+  function voteProgress(event, participant) {
+    const activeJudges = event.judges.filter(item => item.active);
+    const scores = participantScores(event, participant);
+    const voted = new Set(scores.map(item => item.judgeId));
+    const missing = activeJudges.filter(item => !voted.has(item.id));
+    return { activeJudges, scores, missing, complete: activeJudges.length > 0 && missing.length === 0 };
+  }
+
+  function nextOrderedParticipant(event, current) {
+    const round = activeRound(event);
+    const eligible = event.participants.filter(item => (item.round || "qualification") === round && !["completed", "dns"].includes(item.status));
+    const currentIndex = event.participants.findIndex(item => item.id === current?.id);
+    const regularNext = event.participants.slice(currentIndex + 1).find(item => (item.round || "qualification") === round && !["completed", "dns", "repeat"].includes(item.status)) || eligible.find(item => item.status !== "repeat") || null;
+    const repeatEntry = event.control.repeatQueue.find(item => {
+      const afterCategoryId = typeof item === "string" ? current?.categoryId : item.afterCategoryId;
+      return !regularNext || (afterCategoryId === current?.categoryId && regularNext.categoryId !== current?.categoryId);
+    });
+    const repeatId = typeof repeatEntry === "string" ? repeatEntry : repeatEntry?.participantId;
+    const repeat = repeatId ? eligible.find(item => item.id === repeatId) : null;
+    return repeat || regularNext || eligible[0] || null;
   }
 
   function saveRuntime(organization) {
     organization.updatedAt = new Date().toISOString();
     platform.activeOrganizationId = organization.id;
     persistPlatform();
+  }
+
+  function openFileDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("scoreflow.files.v1", 1);
+      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains("files")) request.result.createObjectStore("files", { keyPath: "id" }); };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function storeLocalFile(id, file) {
+    const database = await openFileDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction("files", "readwrite");
+      transaction.objectStore("files").put({ id, blob: file, name: file.name, type: file.type, updatedAt: new Date().toISOString() });
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }
+
+  async function openLocalFile(id) {
+    const database = await openFileDatabase();
+    const record = await new Promise((resolve, reject) => {
+      const request = database.transaction("files", "readonly").objectStore("files").get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    if (!record?.blob) return alert("Il file non è disponibile su questo dispositivo. Ricaricalo dalla scheda atleta.");
+    const url = URL.createObjectURL(record.blob);
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+      const link = document.createElement("a"); link.href = url; link.download = record.name || "allegato"; link.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   function addCriterionRow(criterion = { name: "", min: 0, max: 10, weight: 1, decimals: 1 }) {
@@ -283,8 +372,12 @@
         participants: existing?.events?.[0]?.participants || [],
         judges: existing?.events?.[0]?.judges || [],
         scores: existing?.events?.[0]?.scores || [],
+        scoreHistory: existing?.events?.[0]?.scoreHistory || [],
+        roundHistory: existing?.events?.[0]?.roundHistory || [],
         publicVotes: existing?.events?.[0]?.publicVotes || [],
         resultsValidated: existing?.events?.[0]?.resultsValidated || {},
+        rules: existing?.events?.[0]?.rules || { text: "", file: null },
+        rounds: existing?.events?.[0]?.rounds || { enabled: false, finalistsPerCategory: 3, qualificationLabel: "Eliminatorie", finalLabel: "Finale" },
         control: existing?.events?.[0]?.control || { currentParticipantId: null, status: "setup" },
         createdAt: existing?.events?.[0]?.createdAt || now.toISOString()
       }],
@@ -524,10 +617,10 @@
     const categoryOptions = event.categories.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
     const disciplineOptions = event.disciplines.map(item => `<option>${escapeHtml(item)}</option>`).join("");
     const rows = event.participants.map((participant, index) => `<tr>
-      <td><strong>${index + 1}</strong></td><td><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.club || "Nessuna società")}</small></td>
+      <td><strong>${index + 1}</strong></td><td><div class="athlete-list-identity">${participant.photoDataUrl ? `<img src="${participant.photoDataUrl}" alt="">` : `<span>${escapeHtml(participant.name.charAt(0) || "A")}</span>`}<div><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.club || "Nessuna società")}</small></div></div></td>
       <td>${escapeHtml(categoryName(event, participant.categoryId))}</td><td>${escapeHtml(participant.discipline || "—")}</td>
-      <td><span class="state-badge ${participant.status}">${participant.status === "completed" ? "Completato" : participant.status === "dns" ? "Ritirato" : "Iscritto"}</span></td>
-      <td class="row-actions"><button class="icon-button participant-up" data-id="${participant.id}" title="Sposta su">↑</button><button class="icon-button participant-down" data-id="${participant.id}" title="Sposta giù">↓</button><button class="icon-button remove-participant" data-id="${participant.id}" title="Elimina">×</button></td>
+      <td><span class="state-badge ${participant.status}">${participant.status === "completed" ? "Completato" : participant.status === "dns" ? "Ritirato" : participant.round === "final" ? "Finale" : "Iscritto"}</span></td>
+      <td class="row-actions"><button class="button mini participant-detail" data-id="${participant.id}" title="Apri foto, documenti, musica e badge">Scheda</button><button class="icon-button participant-up" data-id="${participant.id}" title="Sposta su">↑</button><button class="icon-button participant-down" data-id="${participant.id}" title="Sposta giù">↓</button><button class="icon-button remove-participant" data-id="${participant.id}" title="Elimina">×</button></td>
     </tr>`).join("");
     $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Roster e ordine gara</p><h2>Partecipanti</h2><p>Inserisci manualmente gli atleti oppure importa un CSV. L’ordine qui impostato sarà usato dalla regia.</p></div><span class="count-chip">${event.participants.length} iscritti</span></div>
       <div class="dashboard-grid operational-grid"><article class="dash-card"><h3>Nuovo partecipante</h3><form id="participantForm" class="operational-form">
@@ -542,6 +635,7 @@
       saveRuntime(organization); renderParticipants(organization, "Partecipante aggiunto.");
     });
     $("#participantsCsv").addEventListener("change", changeEvent => importParticipantsCsv(changeEvent.target.files[0], organization));
+    $$(".participant-detail", $("#moduleContent")).forEach(button => button.addEventListener("click", () => renderParticipantDetail(organization, button.dataset.id)));
     $$(".participant-up,.participant-down", $("#moduleContent")).forEach(button => button.addEventListener("click", () => {
       const index = event.participants.findIndex(item => item.id === button.dataset.id);
       const target = button.classList.contains("participant-up") ? index - 1 : index + 1;
@@ -555,6 +649,48 @@
       event.participants = event.participants.filter(item => item.id !== button.dataset.id);
       event.scores = event.scores.filter(item => item.participantId !== button.dataset.id);
       saveRuntime(organization); renderParticipants(organization, "Partecipante eliminato.");
+    }));
+  }
+
+  function athleteAttachmentCard(label, key, attachment, accept) {
+    return `<div class="athlete-upload-wrap"><label class="athlete-upload"><span>${label}</span><small>${attachment ? `${escapeHtml(attachment.name)} · ${formatBytes(attachment.size)}` : "Nessun file caricato"}</small><input type="file" data-athlete-file="${key}" accept="${accept}"><em>${attachment ? "Sostituisci file" : "Carica file"}</em></label>${attachment?.blobKey ? `<button class="button mini open-athlete-file" data-blob-key="${attachment.blobKey}">Apri file</button>` : ""}</div>`;
+  }
+
+  function readAthletePhoto(file, participant, organization) {
+    if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > 1024 * 1024) return alert("Per questa prova la foto deve essere inferiore a 1 MB.");
+    const reader = new FileReader();
+    reader.onload = () => { participant.photoDataUrl = String(reader.result); saveRuntime(organization); renderParticipantDetail(organization, participant.id, "Foto atleta salvata."); };
+    reader.readAsDataURL(file);
+  }
+
+  function printAthleteBadge(organization, participant) {
+    const event = organization.events[0];
+    const popup = window.open("", "_blank", "width=600,height=760");
+    if (!popup) return alert("Consenti le finestre popup per stampare il badge.");
+    const logo = organization.brand.logoDataUrl || organization.brand.logoUrl || "";
+    popup.document.write(`<!doctype html><html><head><title>Badge ${escapeHtml(participant.name)}</title><style>*{box-sizing:border-box}body{margin:0;padding:25px;background:#eef2f6;font-family:Arial,sans-serif}.badge{width:360px;min-height:520px;margin:auto;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 18px 55px #1113;border-top:14px solid ${organization.brand.primaryColor || "#c1121f"}.head{padding:22px;text-align:center;border-bottom:4px solid ${organization.brand.accentColor || "#d4af37"}}.head img{max-width:150px;max-height:60px}.photo{width:150px;height:150px;border-radius:50%;object-fit:cover;margin:25px auto 12px;display:block;border:6px solid #f1f5f9}.placeholder{width:150px;height:150px;border-radius:50%;margin:25px auto 12px;display:grid;place-items:center;background:#e2e8f0;font-size:58px;font-weight:900}.body{text-align:center;padding:0 24px 28px}.body h1{font-size:29px;margin:10px 0}.body p{color:#64748b}.chips{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}.chips span{padding:8px 11px;border-radius:99px;background:#f1f5f9;font-weight:700}.number{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;margin-top:25px}@media print{body{background:#fff;padding:0}.badge{box-shadow:none;margin:0 auto}@page{size:A6;margin:8mm}}</style></head><body><main class="badge"><div class="head">${logo ? `<img src="${logo}" alt="Logo">` : `<strong>${escapeHtml(organization.name)}</strong>`}</div>${participant.photoDataUrl ? `<img class="photo" src="${participant.photoDataUrl}" alt="">` : `<div class="placeholder">${escapeHtml(participant.name.charAt(0) || "A")}</div>`}<div class="body"><div class="number">Atleta · uscita ${participant.order}</div><h1>${escapeHtml(participant.name)}</h1><p>${escapeHtml(participant.club || "Atleta indipendente")}</p><div class="chips"><span>${escapeHtml(categoryName(event, participant.categoryId))}</span><span>${escapeHtml(participant.discipline || "Disciplina")}</span></div></div></main><script>window.onload=()=>window.print()<\/script></body></html>`);
+    popup.document.close();
+  }
+
+  function renderParticipantDetail(organization, participantId, message = "") {
+    const event = ensureEventData(organization.events[0]);
+    const participant = event.participants.find(item => item.id === participantId);
+    if (!participant) return renderParticipants(organization);
+    const attachments = participant.attachments || (participant.attachments = {});
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Scheda singolo atleta</p><h2>${escapeHtml(participant.name)}</h2><p>${escapeHtml(participant.club || "Atleta indipendente")} · ${escapeHtml(categoryName(event, participant.categoryId))}</p></div><button class="button ghost back-participants">← Partecipanti</button></div><div class="athlete-profile-grid"><article class="dash-card athlete-profile"><div class="athlete-photo">${participant.photoDataUrl ? `<img src="${participant.photoDataUrl}" alt="Foto ${escapeHtml(participant.name)}">` : `<span>${escapeHtml(participant.name.charAt(0) || "A")}</span>`}</div><label class="button ghost photo-upload">Carica foto<input id="athletePhoto" type="file" accept="image/*"></label><button class="button primary print-badge">Stampa badge</button><small>La foto viene usata per riconoscimento e badge.</small></article><article class="dash-card athlete-files"><h3>Documenti e materiali</h3>${athleteAttachmentCard("Video entry", "entryVideo", attachments.entryVideo, "video/*")}${athleteAttachmentCard("Certificato medico agonistico", "medicalCertificate", attachments.medicalCertificate, "image/*,.pdf")}${athleteAttachmentCard("Musica esibizione", "music", attachments.music, "audio/mpeg,audio/mp3,.mp3")}</article><article class="dash-card athlete-competition"><h3>Dati gara</h3><div class="detail-list"><div><span>Ordine di uscita</span><strong>${participant.order}</strong></div><div><span>Fase</span><strong>${participant.round === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</strong></div><div><span>Tentativo valido</span><strong>${participant.attempt || 1}</strong></div><div><span>Categoria</span><strong>${escapeHtml(categoryName(event, participant.categoryId))}</strong></div></div></article></div><div class="inline-message success">${escapeHtml(message)}</div>`;
+    $(".back-participants").addEventListener("click", () => renderParticipants(organization));
+    $("#athletePhoto").addEventListener("change", inputEvent => readAthletePhoto(inputEvent.target.files[0], participant, organization));
+    $(".print-badge").addEventListener("click", () => printAthleteBadge(organization, participant));
+    $$(".open-athlete-file", $("#moduleContent")).forEach(button => button.addEventListener("click", () => openLocalFile(button.dataset.blobKey)));
+    $$("[data-athlete-file]", $("#moduleContent")).forEach(input => input.addEventListener("change", async inputEvent => {
+      const file = inputEvent.target.files[0];
+      if (!file) return;
+      const blobKey = `${event.id}:${participant.id}:${input.dataset.athleteFile}`;
+      try { await storeLocalFile(blobKey, file); } catch (error) { console.error(error); return alert("Non è stato possibile conservare il file su questo dispositivo."); }
+      attachments[input.dataset.athleteFile] = { name: file.name, type: file.type, size: file.size, blobKey, status: "stored-locally", selectedAt: new Date().toISOString() };
+      saveRuntime(organization);
+      renderParticipantDetail(organization, participant.id, `${file.name} associato alla scheda atleta.`);
     }));
   }
 
@@ -584,7 +720,12 @@
   }
 
   function participantResult(event, participantId) {
-    const scores = event.scores.filter(item => item.participantId === participantId);
+    const participant = event.participants.find(item => item.id === participantId);
+    const scores = participant ? participantScores(event, participant) : [];
+    return resultFromScores(event, scores);
+  }
+
+  function resultFromScores(event, scores) {
     const values = scores.map(score => judgeScore(event, score));
     if (!values.length) return { total: null, count: 0, complete: false };
     let total;
@@ -592,6 +733,10 @@
     else if (event.scoring.aggregation === "median") { const sorted = [...values].sort((a, b) => a - b); const middle = Math.floor(sorted.length / 2); total = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2; }
     else total = values.reduce((sum, value) => sum + value, 0) / values.length;
     return { total, count: values.length, complete: values.length >= event.scoring.minimumJudges };
+  }
+
+  function participantRoundResult(event, participantId, round) {
+    return resultFromScores(event, event.scores.filter(item => item.participantId === participantId && (item.round || "qualification") === round));
   }
 
   function completeDemoData(organization) {
@@ -633,18 +778,37 @@
   }
 
   function currentParticipant(event) {
-    const participant = event.participants.find(item => item.id === event.control.currentParticipantId)
-      || event.participants.find(item => !["completed", "dns"].includes(item.status))
+    const round = activeRound(event);
+    const participant = event.participants.find(item => item.id === event.control.currentParticipantId && (item.round || "qualification") === round)
+      || event.participants.find(item => (item.round || "qualification") === round && !["completed", "dns"].includes(item.status))
       || event.participants[0];
     if (participant) event.control.currentParticipantId = participant.id;
     return participant;
+  }
+
+  function archiveAndRepeat(event, participant, afterCategoryId) {
+    const oldScores = participantScores(event, participant);
+    if (oldScores.length) event.scoreHistory.push(...oldScores.map(score => ({ ...score, invalidatedAt: new Date().toISOString(), invalidationReason: "Ripetizione autorizzata dalla regia" })));
+    const oldIds = new Set(oldScores.map(item => item.id));
+    event.scores = event.scores.filter(item => !oldIds.has(item.id));
+    participant.attempt = Number(participant.attempt || 1) + 1;
+    participant.status = "repeat";
+    if (!event.control.repeatQueue.some(item => (typeof item === "string" ? item : item.participantId) === participant.id)) event.control.repeatQueue.push({ participantId: participant.id, afterCategoryId });
+    event.control.mode = "manual";
+  }
+
+  function judgeWarnings(event, participant) {
+    const progress = voteProgress(event, participant);
+    const started = participant.status === "competing" ? new Date(event.control.voteStartedAt || 0).getTime() : 0;
+    const elapsed = started ? Math.floor((Date.now() - started) / 1000) : 0;
+    return progress.missing.map(judge => ({ judge, delayed: elapsed >= 90, elapsed })).map(({ judge, delayed, elapsed: seconds }) => `<div class="judge-alert ${delayed ? "delayed" : ""}"><span>${delayed ? "!" : "…"}</span><div><strong>${escapeHtml(judge.name)} non ha ancora votato</strong><small>${delayed ? `Scheda ferma da ${Math.floor(seconds / 60)} min ${seconds % 60} sec` : "Votazione in attesa"}</small></div></div>`).join("");
   }
 
   function scoreFields(event, existingScore = null) {
     return event.scoring.criteria.map(criterion => {
       const value = existingScore?.values?.[criterion.id] ?? criterion.min;
       const step = criterion.decimals === 2 ? "0.01" : criterion.decimals === 1 ? "0.1" : "1";
-      return `<label class="score-criterion"><span>${escapeHtml(criterion.name)}</span><small>Da ${criterion.min} a ${criterion.max} · peso ${criterion.weight}</small><input class="score-value" data-criterion="${criterion.id}" type="number" min="${criterion.min}" max="${criterion.max}" step="${step}" value="${value}" required></label>`;
+      return `<label class="score-criterion" title="Inserisci un valore tra ${criterion.min} e ${criterion.max}. Il peso ${criterion.weight} sarà applicato automaticamente."><span>${escapeHtml(criterion.name)}</span><small>Da ${criterion.min} a ${criterion.max} · peso ${criterion.weight}</small><input class="score-value" data-criterion="${criterion.id}" type="number" min="${criterion.min}" max="${criterion.max}" step="${step}" value="${value}" required></label>`;
     }).join("");
   }
 
@@ -654,9 +818,10 @@
     if (penalty > 0 && event.scoring.penalties.noteRequired && !note) return alert("Inserisci la motivazione della penalità.");
     const values = {};
     $$(".score-value", root).forEach(input => { values[input.dataset.criterion] = Number(input.value); });
-    const score = { id: uid("score"), participantId: participant.id, judgeId: judge.id, values, penalty, note, submittedAt: new Date().toISOString() };
-    const existingIndex = event.scores.findIndex(item => item.participantId === participant.id && item.judgeId === judge.id);
+    const score = { id: uid("score"), participantId: participant.id, judgeId: judge.id, round: participant.round || activeRound(event), attempt: participant.attempt || 1, values, penalty, note, submittedAt: new Date().toISOString() };
+    const existingIndex = event.scores.findIndex(item => item.participantId === participant.id && item.judgeId === judge.id && (item.round || "qualification") === score.round && Number(item.attempt || 1) === score.attempt);
     if (existingIndex >= 0) event.scores[existingIndex] = score; else event.scores.push(score);
+    judge.lastActivityAt = score.submittedAt;
     saveRuntime(organization);
     onSaved();
   }
@@ -685,6 +850,8 @@
         const code = $("#judgeLoginCode").value.trim();
         const judge = activeJudges.find(item => String(item.code) === code);
         if (!judge) return setMessage("judgeLoginMessage", "Codice non riconosciuto o giudice disattivato.", true);
+        judge.lastActivityAt = new Date().toISOString();
+        saveRuntime(organization);
         renderJudgeStation(organization, judge.id);
       });
       return;
@@ -696,7 +863,7 @@
       $("#moduleContent").innerHTML = '<article class="module-placeholder"><h2>Nessun atleta</h2><p>La regia deve prima caricare i partecipanti.</p></article>';
       return;
     }
-    const existingScore = event.scores.find(item => item.participantId === participant.id && item.judgeId === judge.id);
+    const existingScore = participantScores(event, participant).find(item => item.judgeId === judge.id);
     const locked = !["ready", "competing"].includes(participant.status);
     $("#moduleContent").innerHTML = `<div class="role-shell judge-shell"><div class="role-top"><div><button class="button ghost station-back">← Postazioni</button><button class="button ghost judge-logout">Cambia giudice</button></div><div class="judge-identity"><span>Giudice</span><strong>${escapeHtml(judge.name)}</strong></div></div><article class="role-athlete"><div><p class="eyebrow">Atleta in pedana</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span></div><span class="state-badge ${participant.status}">${locked ? "In attesa della regia" : participant.status === "competing" ? "In esibizione" : "Chiamato"}</span></article><article class="dash-card judge-score-card"><div class="section-heading"><div><h3>Scheda di valutazione</h3><p class="muted">${existingScore ? "Voto già inviato: puoi correggerlo finché l’atleta è attivo." : "Compila tutti i criteri configurati per l’evento."}</p></div></div>${locked ? '<div class="waiting-panel"><span>⌛</span><strong>Scheda non ancora disponibile</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>' : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event, existingScore)}</div>${event.scoring.penalties.enabled ? `<div class="penalty-panel"><label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="${existingScore?.penalty || 0}"></label><label>Motivazione<input id="scoreNote" value="${escapeHtml(existingScore?.note || "")}" placeholder="Richiesta se applichi una penalità"></label></div>` : ""}<button class="button primary score-submit" type="submit">${existingScore ? "Aggiorna voto" : "Invia voto"}</button></form>`}<div class="inline-message success">${escapeHtml(message)}</div></article></div>`;
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
@@ -711,7 +878,7 @@
     const event = ensureEventData(organization.events[0]);
     const current = currentParticipant(event);
     const currentIndex = current ? event.participants.findIndex(item => item.id === current.id) : -1;
-    const next = event.participants.slice(currentIndex + 1).find(item => !["completed", "dns"].includes(item.status));
+    const next = nextOrderedParticipant(event, current);
     $("#moduleContent").innerHTML = `<div class="role-shell presenter-shell"><div class="role-top"><button class="button ghost station-back">← Postazioni</button><span class="live-chip"><i></i> Vista presentatore</span></div>${current ? `<article class="presenter-stage"><p>${escapeHtml(event.name)}</p><span class="presenter-kicker">Ora in pedana</span><h2>${escapeHtml(current.name)}</h2><h3>${escapeHtml(current.club || "Atleta indipendente")}</h3><div class="presenter-meta"><span>${escapeHtml(current.discipline || "Disciplina")}</span><span>${escapeHtml(categoryName(event, current.categoryId))}</span></div></article><article class="next-athlete"><span>Prossimo atleta</span><strong>${next ? escapeHtml(next.name) : "Fine della sessione"}</strong><small>${next ? `${escapeHtml(next.discipline || "")} · ${escapeHtml(categoryName(event, next.categoryId))}` : "Nessun altro atleta in coda"}</small></article>` : '<article class="module-placeholder"><h2>Nessun atleta in gara</h2></article>'}<div class="role-actions"><button class="button ghost role-refresh">Aggiorna schermata</button></div></div>`;
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
     $(".role-refresh").addEventListener("click", () => renderPresenter(organization));
@@ -719,7 +886,7 @@
 
   function renderStaff(organization, message = "") {
     const event = ensureEventData(organization.events[0]);
-    const rows = event.participants.map((participant, index) => `<article class="staff-row ${participant.id === event.control.currentParticipantId ? "current" : ""}"><span class="staff-order">${index + 1}</span><div><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.discipline || "")} · ${escapeHtml(categoryName(event, participant.categoryId))}</small></div><span class="state-badge ${participant.status}">${participant.status === "ready" ? "Pronto" : participant.status === "delayed" ? "In ritardo" : participant.status === "dns" ? "Ritirato" : participant.status === "completed" ? "Concluso" : participant.status === "competing" ? "In pedana" : "Da chiamare"}</span><div class="staff-actions"><button class="button mini staff-status" data-id="${participant.id}" data-status="ready">Pronto</button><button class="button mini staff-status" data-id="${participant.id}" data-status="delayed">Ritardo</button><button class="button mini danger staff-status" data-id="${participant.id}" data-status="dns">Ritirato</button></div></article>`).join("");
+    const rows = event.participants.filter(participant => (participant.round || "qualification") === activeRound(event)).map((participant, index) => `<article class="staff-row ${participant.id === event.control.currentParticipantId ? "current" : ""}"><span class="staff-order">${participant.order || index + 1}</span><div><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.discipline || "")} · ${escapeHtml(categoryName(event, participant.categoryId))}</small></div><span class="state-badge ${participant.status}">${participant.status === "ready" ? "Pronto" : participant.status === "delayed" ? "In ritardo" : participant.status === "dns" ? "Ritirato" : participant.status === "completed" ? "Concluso" : participant.status === "competing" ? "In pedana" : participant.status === "repeat" ? "Ripetizione" : "Da chiamare"}</span><div class="staff-actions"><button class="button mini staff-status" data-id="${participant.id}" data-status="ready">Pronto</button><button class="button mini staff-status" data-id="${participant.id}" data-status="delayed">Ritardo</button><button class="button mini danger staff-status" data-id="${participant.id}" data-status="dns">Ritirato</button></div></article>`).join("");
     $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Area operativa</p><h2>Postazione staff</h2><p>Prepara gli atleti e aggiorna la regia in tempo reale.</p></div><button class="button ghost station-back">← Postazioni</button></div><div class="staff-list">${rows || '<article class="module-placeholder">Nessun partecipante inserito.</article>'}</div><div class="inline-message success">${escapeHtml(message)}</div>`;
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
     $$(".staff-status", $("#moduleContent")).forEach(button => button.addEventListener("click", () => {
@@ -755,33 +922,56 @@
   }
 
   function renderControl(organization, message = "") {
+    clearTimeout(controlRefreshTimer);
     const event = ensureEventData(organization.events[0]);
     if (!event.participants.length) { $("#moduleContent").innerHTML = '<article class="module-placeholder"><h2>Regia</h2><p>Prima inserisci almeno un partecipante.</p><button class="button primary" data-open-module="participants">Apri Partecipanti</button></article>'; $("[data-open-module]").addEventListener("click", () => activateDashboardModule("participants", organization)); return; }
     const current = currentParticipant(event);
     const activeJudges = event.judges.filter(item => item.active);
-    const participantScores = event.scores.filter(item => item.participantId === current.id);
+    const progress = voteProgress(event, current);
+    const currentScores = progress.scores;
     const criteriaFields = scoreFields(event);
-    const queue = event.participants.map((participant, index) => `<button class="queue-item ${participant.id === current.id ? "active" : ""}" data-participant="${participant.id}"><span>${index + 1}</span><div><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(categoryName(event, participant.categoryId))}</small></div><em>${participant.status === "completed" ? "✓" : participant.status === "dns" ? "R" : participant.status === "delayed" ? "!" : ""}</em></button>`).join("");
-    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Controllo gara</p><h2>Regia</h2><p>Chiama l’atleta, raccogli i voti e chiudi l’esibizione.</p></div><span class="count-chip">${event.participants.filter(item => item.status === "completed").length}/${event.participants.length} completati</span></div>
-      <div class="control-layout"><aside class="dash-card queue"><h3>Ordine di gara</h3>${queue}</aside><section class="control-stage">
-        <article class="current-athlete"><p>${escapeHtml(current.discipline || "Disciplina")}</p><h2>${escapeHtml(current.name)}</h2><span>${escapeHtml(categoryName(event, current.categoryId))} · ${escapeHtml(current.club || "Nessuna società")}</span><div class="control-actions"><button class="button ghost status-button" data-status="ready">Chiama atleta</button><button class="button primary status-button" data-status="competing">Avvia esibizione</button><button class="button success status-button" data-status="completed">Concludi</button><button class="button danger status-button" data-status="dns">Ritirato</button></div></article>
-        <article class="dash-card"><div class="section-heading"><div><p class="eyebrow">Emergenza regia</p><h3>Override voto manuale</h3><p class="muted">Usa questa funzione solo se la postazione di un giudice non è disponibile · ${participantScores.length}/${event.scoring.minimumJudges} voti minimi ricevuti</p></div></div>
+    const queue = event.participants.filter(item => (item.round || "qualification") === activeRound(event)).map((participant, index) => `<button class="queue-item ${participant.id === current.id ? "active" : ""}" data-participant="${participant.id}" ${event.control.mode === "automatic" && participant.id !== current.id ? "disabled" : ""} title="${event.control.mode === "automatic" ? "L’ordine è protetto in modalità automatica" : "Selezione manuale della regia"}"><span>${participant.order || index + 1}</span><div><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(categoryName(event, participant.categoryId))} · tentativo ${participant.attempt || 1}</small></div><em>${participant.status === "completed" ? "✓" : participant.status === "repeat" ? "↻" : participant.status === "dns" ? "R" : participant.status === "delayed" ? "!" : ""}</em></button>`).join("");
+    const canConclude = progress.complete && current.status === "competing";
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Controllo gara · ${activeRound(event) === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</p><h2>Regia</h2><p>L’ordine è protetto: il concorrente successivo si sblocca soltanto quando tutti i giudici attivi hanno inviato il voto.</p></div><span class="count-chip">${event.participants.filter(item => item.status === "completed" && (item.round || "qualification") === activeRound(event)).length}/${event.participants.filter(item => (item.round || "qualification") === activeRound(event)).length} completati</span></div>
+      <article class="dash-card control-settings"><div><strong>Avanzamento gara</strong><small>Automatico segue la scaletta; manuale abilita interventi e ripetizioni.</small></div><div class="segmented"><button data-control-mode="automatic" class="${event.control.mode === "automatic" ? "active" : ""}">Automatico</button><button data-control-mode="manual" class="${event.control.mode === "manual" ? "active" : ""}">Manuale</button></div></article>
+      <div class="control-layout"><aside class="dash-card queue"><h3>Scaletta uscite</h3>${queue}${event.control.repeatQueue.length ? `<div class="repeat-queue"><strong>Ripetizioni programmate</strong>${event.control.repeatQueue.map(item => { const id = typeof item === "string" ? item : item.participantId; const athlete = event.participants.find(entry => entry.id === id); return athlete ? `<small>↻ ${escapeHtml(athlete.name)} · tra due categorie</small>` : ""; }).join("")}</div>` : ""}</aside><section class="control-stage">
+        <article class="current-athlete"><p>${escapeHtml(current.discipline || "Disciplina")} · uscita ${current.order}</p><h2>${escapeHtml(current.name)}</h2><span>${escapeHtml(categoryName(event, current.categoryId))} · ${escapeHtml(current.club || "Nessuna società")} · tentativo ${current.attempt || 1}</span><div class="control-actions"><button class="button ghost status-button" data-status="ready">Chiama atleta</button><button class="button primary status-button" data-status="competing">Avvia esibizione</button><button class="button success status-button" data-status="completed" ${canConclude ? "" : "disabled"} title="${canConclude ? "Chiude l’esibizione" : "In attesa del voto di tutti i giudici attivi"}">Concludi e avanza</button><button class="button warning repeat-athlete" ${event.control.mode === "manual" ? "" : "disabled"} title="Disponibile in modalità manuale">Autorizza ripetizione</button><button class="button danger status-button" data-status="dns">Ritirato</button></div></article>
+        <article class="dash-card vote-monitor"><div class="section-heading"><div><p class="eyebrow">Controllo votazione</p><h3>${progress.scores.length}/${progress.activeJudges.length} giudici hanno terminato</h3></div><button class="button ghost refresh-control">Aggiorna</button></div>${progress.complete ? '<div class="vote-complete">✓ Tutti i giudici hanno votato. È possibile avanzare.</div>' : `<div class="judge-alerts">${judgeWarnings(event, current) || '<div class="warning-box">Nessun giudice attivo configurato.</div>'}</div>`}<details class="rules-tip"><summary>Regolamento e indicazioni di gara</summary><p>${escapeHtml(event.rules.text || "Nessun regolamento inserito. Aggiungilo nella sezione Evento.")}</p></details></article>
+        <article class="dash-card"><div class="section-heading"><div><p class="eyebrow">Emergenza regia</p><h3>Override voto manuale</h3><p class="muted">Usa questa funzione solo se la postazione di un giudice non è disponibile · ${currentScores.length}/${event.scoring.minimumJudges} voti minimi ricevuti</p></div></div>
           ${activeJudges.length ? `<form id="scoreForm"><div class="operational-form score-form"><label>Giudice<select id="scoreJudge">${activeJudges.map(judge => `<option value="${judge.id}">${escapeHtml(judge.name)}</option>`).join("")}</select></label>${criteriaFields}${event.scoring.penalties.enabled ? '<label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="0"></label><label class="wide">Motivazione penalità<input id="scoreNote" placeholder="Obbligatoria se la penalità è maggiore di zero"></label>' : ""}</div><button class="button primary" type="submit">Salva voto</button></form>` : '<p class="warning-box">Configura almeno un giudice attivo prima di inserire i voti.</p>'}
-          <div class="submitted-scores">${participantScores.map(score => { const judge = event.judges.find(item => item.id === score.judgeId); return `<div><span>${escapeHtml(judge?.name || "Giudice eliminato")}</span><strong>${judgeScore(event, score).toFixed(2)}</strong></div>`; }).join("")}</div><div class="inline-message success">${escapeHtml(message)}</div></article>
+          <div class="submitted-scores">${currentScores.map(score => { const judge = event.judges.find(item => item.id === score.judgeId); return `<div><span>${escapeHtml(judge?.name || "Giudice eliminato")}</span><strong>${judgeScore(event, score).toFixed(2)}</strong></div>`; }).join("")}</div><div class="inline-message success">${escapeHtml(message)}</div></article>
       </section></div>`;
-    $$(".queue-item", $("#moduleContent")).forEach(button => button.addEventListener("click", () => { event.control.currentParticipantId = button.dataset.participant; saveRuntime(organization); renderControl(organization); }));
-    $$(".status-button", $("#moduleContent")).forEach(button => button.addEventListener("click", () => { current.status = button.dataset.status; event.control.status = button.dataset.status; if (button.dataset.status === "completed" || button.dataset.status === "dns") { const currentIndex = event.participants.findIndex(item => item.id === current.id); const next = event.participants.slice(currentIndex + 1).find(item => item.status !== "completed" && item.status !== "dns"); if (next) event.control.currentParticipantId = next.id; } saveRuntime(organization); renderControl(organization, `Stato di ${current.name} aggiornato.`); }));
+    $$('[data-control-mode]', $("#moduleContent")).forEach(button => button.addEventListener("click", () => { event.control.mode = button.dataset.controlMode; saveRuntime(organization); renderControl(organization, `Avanzamento ${button.dataset.controlMode === "automatic" ? "automatico" : "manuale"} attivato.`); }));
+    $$(".queue-item", $("#moduleContent")).forEach(button => button.addEventListener("click", () => { if (event.control.mode !== "manual" || (current.status === "competing" && !progress.complete)) return; event.control.currentParticipantId = button.dataset.participant; saveRuntime(organization); renderControl(organization); }));
+    $$(".status-button", $("#moduleContent")).forEach(button => button.addEventListener("click", () => {
+      const status = button.dataset.status;
+      if (status === "completed" && !voteProgress(event, current).complete) return alert("Non puoi avanzare: almeno un giudice attivo non ha ancora terminato la votazione.");
+      current.status = status; event.control.status = status;
+      if (status === "competing") event.control.voteStartedAt = new Date().toISOString();
+      if (status === "completed" || status === "dns") {
+        const next = nextOrderedParticipant(event, current);
+        if (next) {
+          event.control.currentParticipantId = next.id;
+          event.control.voteStartedAt = null;
+          event.control.repeatQueue = event.control.repeatQueue.filter(item => (typeof item === "string" ? item : item.participantId) !== next.id);
+        }
+      }
+      saveRuntime(organization); renderControl(organization, `Stato di ${current.name} aggiornato.`);
+    }));
+    $(".repeat-athlete").addEventListener("click", () => { if (!confirm(`Annullare i voti attuali di ${current.name} e inserirla nuovamente in scaletta?`)) return; archiveAndRepeat(event, current, current.categoryId); const next = nextOrderedParticipant(event, current); if (next) { event.control.currentParticipantId = next.id; if (next.id === current.id) event.control.repeatQueue = event.control.repeatQueue.filter(item => (typeof item === "string" ? item : item.participantId) !== next.id); } event.control.voteStartedAt = null; saveRuntime(organization); renderControl(organization, `${current.name} inserita tra due categorie. I voti precedenti sono archiviati come annullati.`); });
+    $(".refresh-control").addEventListener("click", () => renderControl(organization));
     if ($("#scoreForm")) $("#scoreForm").addEventListener("submit", submitEvent => {
       submitEvent.preventDefault();
       const judgeId = $("#scoreJudge").value;
       const judge = activeJudges.find(item => item.id === judgeId);
       saveScoreFromForm(event, organization, current, judge, $("#scoreForm"), () => renderControl(organization, "Override salvato. Il voto precedente dello stesso giudice, se presente, è stato aggiornato."));
     });
+    if (current.status === "competing" && !progress.complete) controlRefreshTimer = setTimeout(() => renderControl(organization), 15000);
   }
 
   function athleteReportHtml(organization, participant) {
     const event = ensureEventData(organization.events[0]);
-    const scores = event.scores.filter(item => item.participantId === participant.id);
+    const scores = participantScores(event, participant);
     const result = participantResult(event, participant.id);
     const logo = organization.brand.logoDataUrl || organization.brand.logoUrl;
     const criteriaHeaders = event.scoring.criteria.map(item => `<th>${escapeHtml(item.name)}<small>Peso ${item.weight}</small></th>`).join("");
@@ -807,19 +997,56 @@
 
   function renderResults(organization) {
     const event = ensureEventData(organization.events[0]);
+    const resultRound = activeRound(event);
     const sections = event.categories.map(category => {
-      const ranked = event.participants.filter(item => item.categoryId === category.id).map(participant => ({ participant, result: participantResult(event, participant.id) })).sort((a, b) => (b.result.total ?? -1) - (a.result.total ?? -1));
+      const ranked = event.participants.filter(item => item.categoryId === category.id && (item.round || "qualification") === resultRound).map(participant => ({ participant, result: participantResult(event, participant.id) })).sort((a, b) => (b.result.total ?? -1) - (a.result.total ?? -1));
       if (!ranked.length) return "";
       return `<article class="dash-card results-card"><div class="section-heading"><div><p class="eyebrow">Categoria</p><h3>${escapeHtml(category.name)}</h3></div></div><div class="table-wrap"><table><thead><tr><th>Pos.</th><th>Atleta</th><th>Voti</th><th>Risultato</th><th>Stato</th><th>Scheda</th></tr></thead><tbody>${ranked.map((item, index) => `<tr><td><strong>${item.result.total === null ? "—" : index + 1}</strong></td><td class="athlete-cell"><strong>${escapeHtml(item.participant.name)}</strong><small>${escapeHtml(item.participant.club || "")}</small></td><td>${item.result.count}/${event.scoring.minimumJudges}</td><td><strong>${item.result.total === null ? "—" : item.result.total.toFixed(2)}</strong></td><td><span class="state-badge ${item.result.complete ? "completed" : "registered"}">${item.result.complete ? "Valido" : "Provvisorio"}</span></td><td><button class="button mini athlete-report" data-participant="${item.participant.id}" ${item.result.count ? "" : "disabled"}>Apri scheda</button></td></tr>`).join("")}</tbody></table></div></article>`;
     }).join("");
-    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Classifiche</p><h2>Risultati</h2><p>I risultati sono calcolati automaticamente secondo i criteri, i pesi e le penalità configurate.</p></div><button id="exportResultsBtn" class="button ghost">Esporta CSV</button></div><div class="results-list">${sections || '<article class="module-placeholder"><p>Nessun partecipante da classificare.</p></article>'}</div>`;
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Classifiche · ${resultRound === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</p><h2>Risultati</h2><p>I risultati sono calcolati automaticamente secondo i criteri, i pesi e le penalità configurate.</p></div><button id="exportResultsBtn" class="button ghost">Esporta CSV</button></div><div class="results-list">${sections || '<article class="module-placeholder"><p>Nessun partecipante da classificare.</p></article>'}</div>`;
     $("#exportResultsBtn").addEventListener("click", () => {
       const rows = [["Categoria", "Posizione", "Atleta", "Società", "Voti", "Risultato"]];
-      event.categories.forEach(category => { event.participants.filter(item => item.categoryId === category.id).map(participant => ({ participant, result: participantResult(event, participant.id) })).sort((a, b) => (b.result.total ?? -1) - (a.result.total ?? -1)).forEach((item, index) => rows.push([category.name, item.result.total === null ? "" : index + 1, item.participant.name, item.participant.club || "", item.result.count, item.result.total === null ? "" : item.result.total.toFixed(2)])); });
+      event.categories.forEach(category => { event.participants.filter(item => item.categoryId === category.id && (item.round || "qualification") === resultRound).map(participant => ({ participant, result: participantResult(event, participant.id) })).sort((a, b) => (b.result.total ?? -1) - (a.result.total ?? -1)).forEach((item, index) => rows.push([category.name, item.result.total === null ? "" : index + 1, item.participant.name, item.participant.club || "", item.result.count, item.result.total === null ? "" : item.result.total.toFixed(2)])); });
       const csv = rows.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(";")).join("\n");
       const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })); link.download = `${organization.slug}-risultati.csv`; link.click(); URL.revokeObjectURL(link.href);
     });
     $$(".athlete-report", $("#moduleContent")).forEach(button => button.addEventListener("click", () => openAthleteReport(organization, button.dataset.participant)));
+  }
+
+  function renderEventDashboard(organization, message = "") {
+    const event = ensureEventData(organization.events[0]);
+    const categoryRows = event.categories.map((category, index) => {
+      const athletes = event.participants.filter(item => item.categoryId === category.id);
+      return `<div class="schedule-category"><span>${index + 1}</span><div><strong>${escapeHtml(category.name)}</strong><small>${athletes.length} atleti · uscite ${athletes.map(item => item.order).join(", ") || "—"}</small></div></div>`;
+    }).join("");
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Programma ufficiale</p><h2>Evento e regolamento</h2><p>Qui trovi scaletta delle categorie, regole operative e documentazione di gara.</p></div><span class="count-chip">${event.categories.length} categorie</span></div><div class="event-operations"><article class="dash-card"><h3>Scaletta categorie</h3><div class="schedule-list">${categoryRows}</div></article><article class="dash-card rules-editor"><h3>Regolamento di gara</h3><label>Testo e indicazioni<textarea id="competitionRules" rows="10" placeholder="Inserisci regolamento, norme di comportamento, criteri per ritardi e ripetizioni...">${escapeHtml(event.rules.text || "")}</textarea></label><label class="file-drop">Carica regolamento PDF<input id="rulesFile" type="file" accept=".pdf,application/pdf"></label>${event.rules.file ? `<div class="file-chip"><div><strong>${escapeHtml(event.rules.file.name)}</strong><small>${formatBytes(event.rules.file.size)}</small></div>${event.rules.file.blobKey ? `<button class="button mini open-rules-file" data-blob-key="${event.rules.file.blobKey}">Apri PDF</button>` : ""}</div>` : ""}<button class="button primary save-rules">Salva regolamento</button><div class="inline-message success">${escapeHtml(message)}</div></article></div>`;
+    $(".save-rules").addEventListener("click", () => { event.rules.text = $("#competitionRules").value.trim(); saveRuntime(organization); renderEventDashboard(organization, "Regolamento salvato e reso disponibile alla regia."); });
+    if ($(".open-rules-file")) $(".open-rules-file").addEventListener("click", buttonEvent => openLocalFile(buttonEvent.currentTarget.dataset.blobKey));
+    $("#rulesFile").addEventListener("change", async inputEvent => { const file = inputEvent.target.files[0]; if (!file) return; const blobKey = `${event.id}:regolamento`; try { await storeLocalFile(blobKey, file); } catch (error) { console.error(error); return alert("Non è stato possibile conservare il regolamento su questo dispositivo."); } event.rules.file = { name: file.name, size: file.size, type: file.type, blobKey, status: "stored-locally" }; saveRuntime(organization); renderEventDashboard(organization, "File del regolamento salvato sul dispositivo."); });
+  }
+
+  function renderEliminations(organization, message = "") {
+    const event = ensureEventData(organization.events[0]);
+    const qualificationSections = event.categories.map(category => {
+      const ranked = event.participants.filter(item => item.categoryId === category.id).map(participant => ({ participant, result: participantRoundResult(event, participant.id, "qualification") })).filter(item => item.result.total !== null).sort((a, b) => b.result.total - a.result.total);
+      if (!ranked.length) return "";
+      return `<article class="dash-card elimination-card"><h3>${escapeHtml(category.name)}</h3>${ranked.map((item, index) => `<div><span>${index + 1}</span><strong>${escapeHtml(item.participant.name)}</strong><em>${item.result.total.toFixed(2)}</em><small>${item.participant.round === "final" ? "Finalista" : index < event.rounds.finalistsPerCategory ? "Zona qualificazione" : "Eliminato"}</small></div>`).join("")}</article>`;
+    }).join("");
+    const finalists = event.participants.filter(item => item.round === "final");
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Fasi di gara</p><h2>Eliminatorie e finale</h2><p>Le classifiche delle due fasi restano separate. La finale genera una nuova votazione senza cancellare lo storico delle eliminatorie.</p></div><span class="count-chip">${finalists.length} finalisti</span></div><article class="dash-card rounds-config"><label class="toggle"><input id="roundsEnabled" type="checkbox" ${event.rounds.enabled ? "checked" : ""}><span></span>Abilita eliminatorie</label><label>Finalisti per categoria<input id="finalistsCount" type="number" min="1" value="${event.rounds.finalistsPerCategory}"></label><button class="button ghost save-rounds">Salva impostazioni</button><button class="button primary generate-final" ${event.rounds.enabled ? "" : "disabled"}>Genera finale dalle classifiche</button></article><div class="inline-message success">${escapeHtml(message)}</div><div class="elimination-grid">${qualificationSections || '<article class="module-placeholder"><p>Le classifiche delle eliminatorie compariranno dopo i primi voti.</p></article>'}</div>`;
+    $(".save-rounds").addEventListener("click", () => { event.rounds.enabled = $("#roundsEnabled").checked; event.rounds.finalistsPerCategory = Math.max(1, Number($("#finalistsCount").value) || 1); saveRuntime(organization); renderEliminations(organization, "Impostazioni delle fasi salvate."); });
+    $(".generate-final").addEventListener("click", () => {
+      if (!confirm("Generare la finale con i migliori atleti di ogni categoria? I punteggi delle eliminatorie resteranno archiviati.")) return;
+      const selected = [];
+      event.categories.forEach(category => {
+        event.participants.filter(item => item.categoryId === category.id).map(participant => ({ participant, result: participantRoundResult(event, participant.id, "qualification") })).filter(item => item.result.complete).sort((a, b) => b.result.total - a.result.total).slice(0, event.rounds.finalistsPerCategory).forEach(item => selected.push(item.participant));
+      });
+      if (!selected.length) return alert("Non ci sono ancora risultati validi per generare la finale.");
+      event.roundHistory.push({ id: uid("round"), round: "qualification", closedAt: new Date().toISOString(), finalists: selected.map(item => item.id) });
+      selected.forEach((participant, index) => { participant.round = "final"; participant.status = "registered"; participant.attempt = 1; participant.order = index + 1; });
+      event.control.round = "final"; event.control.currentParticipantId = selected[0].id; event.control.status = "setup"; event.control.repeatQueue = [];
+      saveRuntime(organization); renderEliminations(organization, `${selected.length} finalisti inseriti nella nuova scaletta.`);
+    });
   }
 
   function renderDashboardModule(module, organization, message = "") {
@@ -853,8 +1080,10 @@
     if (module === "presenter") return renderPresenter(organization);
     if (module === "staff") return renderStaff(organization);
     if (module === "control") return renderControl(organization);
+    if (module === "eliminations") return renderEliminations(organization);
     if (module === "results") return renderResults(organization);
     if (module === "public") return renderPublic(organization);
+    if (module === "event") return renderEventDashboard(organization);
     const definitions = {
       event: ["Evento", "Modifica sessioni, discipline, categorie, ordine di gara, pause e premiazioni."],
       public: ["Voto pubblico", event.publicVoting.enabled ? "Il voto pubblico è attivo per questo evento." : "Il voto pubblico è disattivato. Puoi abilitarlo dalla configurazione dell’evento."]

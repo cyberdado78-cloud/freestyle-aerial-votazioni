@@ -70,4 +70,5 @@ PASS hero primary action opens working control station
 PASS preparation progress checks active judges against required minimum
 PASS slow registration response cannot overwrite a newly selected module
 PASS feedback messages are nonblocking, escaped and dismissible
-{"passed":7,"failed":0}
+PASS leaving dashboard for configuration releases mobile scroll lock
+{"passed":8,"failed":0}

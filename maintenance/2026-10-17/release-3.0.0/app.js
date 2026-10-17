@@ -1485,6 +1485,7 @@
   }
 
   function showOnboarding() {
+    closeDashboardNavigation();
     $("#onboarding").classList.remove("hidden");
   }
 
@@ -1547,6 +1548,7 @@
   }
 
   function showConfigurator() {
+    closeDashboardNavigation();
     clearInterval(cloudPollTimer);
     $("#newConfigBtn").classList.remove("hidden");
     applyBrandTheme($("#primaryColor").value, $("#accentColor").value);

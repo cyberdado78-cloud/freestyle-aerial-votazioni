@@ -2,7 +2,7 @@
 
 ## Risultato e stato della correzione
 
-Il sito pubblicato è **2.7.0 beta — Comunicazioni iscrizioni**. Il branch `main` di questo repository è invece ancora **1.5.0**, commit `de083cf0447dbeb309a5ccb0301b5523254908d3` del 1 ottobre. Questa proposta conserva una patch per il frontend 2.7, senza sostituire il vecchio server con un'app incompatibile con il backend online. **La patch non è pubblicata sul sito.**
+Il sito pubblicato ora è **2.7.1 beta — Stabilità regia** (precedentemente 2.7.0). Il branch `main` di questo repository è invece ancora **1.5.0**, commit `de083cf0447dbeb309a5ccb0301b5523254908d3` del 1 ottobre. Questa proposta conserva una patch per il frontend 2.7, senza sostituire il vecchio server con un'app incompatibile con il backend online. **Correzione pubblicata e verificata online; vedi [DEPLOYED.md](DEPLOYED.md).**
 
 ### Problemi riprodotti
 
@@ -59,6 +59,6 @@ NODE_PATH=/path/to/test-deps/node_modules node control-regression.cjs /path/to/a
 
 Confronto: la versione originale fallisce sei regressioni; la patch deve superare l'intera suite. Dopo deploy: ripetere la prova dei 15 secondi nel browser e verificare navigazione, salvataggio e sincronizzazione da postazioni distinte.
 
-## Blocco pubblicazione
+## Pubblicazione e verifica online
 
-Il collegamento Hostinger ha restituito `Connection to establish proxy tunnel timed out after 5000ms`; un successivo tentativo non ha restituito un risultato entro il limite. Nessun deploy eseguito. Serve recuperare l'installazione aggiornata tramite il pannello Hostinger prima della pubblicazione.
+Dopo il fallimento del collegamento diretto, l'utente ha autorizzato l'accesso al pannello Hostinger e completato il login. Recuperati i sorgenti attivi, sono stati sostituiti soltanto app.js e index.html: frontend 2.7.1 online, hash uguale alla copia testata. Il valore 9.3 e la nota sono rimasti presenti per oltre 40 secondi; il passaggio ai Risultati è rimasto stabile oltre 30 secondi. Verificato anche il mantenimento della bozza con Aggiorna manuale. Dettagli e hash in DEPLOYED.md.

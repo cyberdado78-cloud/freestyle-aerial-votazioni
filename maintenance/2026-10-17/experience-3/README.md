@@ -33,8 +33,8 @@ Il server autorizza gli invii centrali solo per un tenant con licenza attiva e n
 - 20 regressioni del flusso gara: include 12 qualificazioni e 12 finali con quattro giudici, 96 schede, bozze, ripetizioni e reset.
 - 27 test backend email: isolamento, cifratura, modalità personale/gestita, licenza attiva e scaduta, mittente e Reply-To, indisponibilità onesta del servizio, disattivazione e rimozione chiavi.
 - 9 test interfaccia email: campi essenziali, opzioni avanzate, chiavi non persistite nel browser, salvataggio, prova e gestione errori.
-- 7 test navigazione/feedback: nomi accessibili, menu, Escape e focus, pagina corrente, ingresso in regia, progressione corretta, risposta lenta e notifiche sicure.
-- Totale: 63 test locali passati. verification.txt contiene il risultato integrale. Il provider è simulato nei test di invio.
+- 8 test navigazione/feedback: nomi accessibili, menu, Escape e focus, pagina corrente, ingresso in regia, progressione corretta, risposta lenta e notifiche sicure.
+- Totale: 64 test locali passati. verification.txt contiene il risultato integrale. Il provider è simulato nei test di invio.
 - 13 controlli sulle API online con organizzazione QA e dati fittizi: persistenza, isolamento amministratore/staff, modalità gestita senza nuove credenziali esterne, servizio non attivo e contatto invalido. Nessun invio; preferenze QA disattivate e chiave sintetica rimossa alla fine.
 - Browser reale: verificate dashboard, regia e pagina iscrizioni, senza overflow orizzontale nella vista desktop. Lo screenshot documenta la nuova interfaccia. Le regole responsive e la logica del menu sono implementate e testate; non è stato completato un collaudo su telefoni/tablet fisici.
 - Hash dei quattro file pubblicati confrontati con gli archivi locali e /health.version=3.0.0, report http-verification.json.

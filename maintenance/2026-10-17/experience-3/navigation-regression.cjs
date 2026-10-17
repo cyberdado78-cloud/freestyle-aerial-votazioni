@@ -10,5 +10,7 @@ const cases=[
  ['slow registration response cannot overwrite a newly selected module',async c=>{let release;const pending=new Promise(r=>release=r);c.w.fetch=async(url)=>{if(url.includes('/registrations?'))return pending;return{ok:true,json:async()=>({settings:{mode:'managed'}})};};c.w.qa.open('registrations');c.w.qa.open('results');const before=c.$('#moduleContent').innerHTML;release({ok:true,json:async()=>({registrations:[]})});await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));assert.equal(c.$('#moduleContent').innerHTML,before);assert.equal(c.$('#organizationEmailSettings'),null);}]
  ,['feedback messages are nonblocking, escaped and dismissible',async c=>{c.w.qa.toast('<img src=x onerror=alert(1)>');assert.equal(c.$('.sf-toast p').textContent,'<img src=x onerror=alert(1)>');assert.equal(c.$('.sf-toast img'),null);assert.equal(c.$('.sf-toast').getAttribute('role'),'status');c.$('.sf-toast button').click();assert.equal(c.$('.sf-toast'),null);}]
 
+ ,['leaving dashboard for configuration releases mobile scroll lock',async c=>{c.$('#navToggle').click();c.$('#backToConfigBtn').click();assert.equal(c.w.document.body.classList.contains('navigation-open'),false);assert.ok(c.$('#dashboard').classList.contains('hidden'));}]
+
 ];
 (async()=>{let failed=0;for(const[n,run]of cases){const c=boot();try{await run(c);console.log('PASS '+n);}catch(e){failed++;console.log('FAIL '+n+': '+e.message);}finally{c.d.window.close();}}console.log(JSON.stringify({passed:cases.length-failed,failed}));process.exitCode=failed?1:0;})();

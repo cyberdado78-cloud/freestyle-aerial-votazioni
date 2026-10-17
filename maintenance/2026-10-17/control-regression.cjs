@@ -131,6 +131,28 @@ const cases = [
     assert.match(ctx.$('.judge-score-card').textContent, /Voto inviato e bloccato/);
     assert.equal(event.scores.filter(item => item.participantId === participant.id && item.judgeId === judge.id).length, 1);
   }],
+  ['judge cloud refresh retains sign-in and unsent scores and notes', ctx => {
+    const judge = ctx.qa.organization().events[0].judges[0]; ctx.qa.open('judge');
+    ctx.$('#judgeLoginCode').value = judge.code;
+    ctx.$('#judgeLoginForm').dispatchEvent(new ctx.w.Event('submit', { bubbles: true, cancelable: true }));
+    ctx.$('#judgeScoreForm .score-value').value = '9.3'; ctx.$('#judgeOptionalNote').value = 'QA unsent note';
+    ctx.qa.render('judge'); assert.equal(ctx.$('#judgeLoginForm'), null);
+    assert.equal(ctx.$('#judgeScoreForm .score-value').value, '9.3'); assert.equal(ctx.$('#judgeOptionalNote').value, 'QA unsent note');
+  }],
+  ['judge draft never follows another athlete during cloud refresh', ctx => {
+    const event = ctx.qa.organization().events[0]; const judge = event.judges[0]; ctx.qa.open('judge');
+    ctx.$('#judgeLoginCode').value = judge.code;
+    ctx.$('#judgeLoginForm').dispatchEvent(new ctx.w.Event('submit', { bubbles: true, cancelable: true }));
+    ctx.$('#judgeScoreForm .score-value').value = '9.3';
+    event.control.currentParticipantId = event.participants[3].id; event.participants[3].status = 'ready';
+    ctx.qa.render('judge'); assert.equal(ctx.$('#judgeLoginForm'), null); assert.equal(ctx.$('#judgeScoreForm .score-value').value, '0');
+  }],
+  ['explicit judge logout is retained after a cloud refresh', ctx => {
+    const judge = ctx.qa.organization().events[0].judges[0]; ctx.qa.open('judge');
+    ctx.$('#judgeLoginCode').value = judge.code;
+    ctx.$('#judgeLoginForm').dispatchEvent(new ctx.w.Event('submit', { bubbles: true, cancelable: true }));
+    ctx.$('.judge-logout').click(); ctx.qa.render('judge'); assert.ok(ctx.$('#judgeLoginForm'));
+  }],
   ['public vote stays separate and blocks a second vote on the device', ctx => {
     const event = ctx.qa.organization().events[0]; event.publicVoting.enabled = true;
     const scores = JSON.stringify(event.scores); ctx.qa.open('public');

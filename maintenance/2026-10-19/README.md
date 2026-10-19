@@ -24,8 +24,20 @@ Gli indicatori /health e /api/status riportavano email=false in modo fisso. Ora 
 - 64 regressioni precedenti della 3.0 ripetute con esito positivo prima della configurazione; interfaccia invariata in questa patch.
 - Verifiche HTTP online: stato e versione confermati. JavaScript pubblico confrontato con la copia 3.0 archiviata.
 
-## Limite del collaudo
+## Collaudo tecnico completato dopo autorizzazione esplicita
 
-Nessun invio reale o simulato a Resend è stato verificato in questa sessione. Il controllo automatico delle autorizzazioni ha rifiutato la creazione e poi la verifica dell’organizzazione QA proposta, ritenendole fuori dall’autorizzazione concessa. Il collaudo attraverso un’organizzazione di prova con licenza dedicata richiede autorizzazione esplicita. Lo stato di quell’operazione non è stato ulteriormente investigato dopo il rifiuto. Non presentare configurazione pronta o test locali come prova di consegna email.
+Il 19 ottobre l’utente ha autorizzato l’organizzazione temporanea, la licenza di prova e un invio all’indirizzo tecnico delivered@resend.dev. Creata la sola organizzazione qa-email-20261019-c9d2e3ea, con dati fittizi e nessun evento/portale aperto. Associata una licenza tecnica temporanea senza acquisti o modifiche alle licenze dei clienti.
+
+Il test è passato attraverso POST /api/tenants/{tenant}/email-settings/test sull’app di produzione, usando la modalità gestita centrale e nessuna chiave API personale della società. Risposta HTTP 200 e lastTestStatus=accepted. Il dettaglio Resend mostra:
+
+- ID messaggio 01a1536c-bd68-7c8c-b0a2-7daa0801508a.
+- From: "COLLAUDO SOCIETÀ ORGANIZZATRICE · ScoreFlow" <notifiche@scoreflow.dynamiczen.it>.
+- Reply-To: info@freestyle-academy.it.
+- To: delivered@resend.dev, destinatario tecnico di simulazione Resend.
+- Eventi Sent e Delivered visibili nel pannello del provider.
+
+Questo verifica il percorso reale app → API Resend e il comportamento del destinatario di test; non certifica arrivo, spam o lettura in una casella reale Gmail/Outlook. Non sono stati inviati messaggi a iscritti o clienti reali. Le preferenze automatiche dell’organizzazione QA sono rimaste disabilitate; la funzione di prova usa intenzionalmente il trasporto salvato anche con invii automatici disabilitati.
+
+Dopo il test: impostazioni QA email_enabled=false, licenza QA active=false ed expires_at aggiornato, organizzazione rinominata COLLAUDO EMAIL 19-10-2026 — CHIUSO. Controllo finale SQL conferma questi stati e last_test_status=accepted. Nessun dato eliminato; traccia del test conservata.
 
 I tre record aggiunti inizialmente alla zona padre dynamiczen.it sono rimasti presenti; sono ridondanti e mascherati dalla zona autonoma scoreflow.dynamiczen.it. I record efficaci sono quelli della zona dedicata. Non sono stati rimossi record preesistenti né modificati MX, nameserver o altri siti.

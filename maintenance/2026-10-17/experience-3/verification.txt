@@ -1,0 +1,74 @@
+COMMAND: node scoreflow/maintenance/2026-10-17/control-regression.cjs scoreflow-3-release/app.js scoreflow-3-release/index.html
+PASS 15-second refresh preserves scores, judge and penalty note
+PASS manual refresh preserves unsaved inputs
+PASS navigating away cancels control timer and keeps results visible
+PASS cloud redraw preserves unsaved score for the same athlete
+PASS draft is not copied to the next athlete
+PASS draft is not copied to a repeat attempt
+PASS refresh uses latest cloud organization instead of obsolete object
+PASS removed judge does not inherit another judge draft
+PASS saving after automatic refresh records exact draft and clears it
+PASS all judges unlock advancement and weighted result includes penalty
+PASS judge station accepts one final vote and then locks the sheet
+PASS judge cloud refresh retains sign-in and unsent scores and notes
+PASS judge draft never follows another athlete during cloud refresh
+PASS explicit judge logout is retained after a cloud refresh
+PASS public vote stays separate and blocks a second vote on the device
+PASS withdrawal advances the queue without removing the athlete
+PASS repeat archives previous votes instead of counting them in new attempt
+PASS final starts a separate round while qualification votes stay archived
+PASS complete 12-athlete qualification and final preserve separate rankings
+PASS post-test reset preserves roster, judges and configuration
+
+COMMAND: node scoreflow/maintenance/2026-10-17/experience-3/email-regression.cjs scoreflow-3-release/server.js
+PASS unauthenticated access cannot read or save email settings
+PASS staff device token cannot configure email
+PASS another organization cannot read or change settings
+PASS unconfigured organization returns disabled settings
+PASS cannot enable without sender and key
+PASS reject invalid sender, key, reply-to and header injection
+PASS save encrypted key and return metadata without secret
+PASS ciphertext uses random nonce and cannot cross tenants or be tampered
+PASS blank key retains saved key while editing sender
+PASS disabled organization does not use shared server credentials
+PASS test validates recipient before provider call
+PASS test while disabled uses organization sender and key without leaking it
+PASS test endpoint rate limits repeat requests
+PASS provider failure has honest status and sanitized error
+PASS network failure never exposes exception text
+PASS enable organization transport and preserve key across reads
+PASS another organization has independent email settings
+PASS removing key requires disabling sending and actually removes it
+PASS managed mode needs only organization name and contact address
+PASS managed mode rejects incomplete contact details
+PASS unavailable central service cannot claim an email was sent
+PASS central delivery requires activated event license
+PASS licensed managed event uses central sender and client contact for replies
+PASS expired license stops central sending without deleting preferences
+PASS custom mode never borrows central keys when missing its own key
+PASS managed mode cannot use an invalid central sender
+PASS suspending managed sending retains contact and sends nothing
+{"passed":27,"failed":0}
+
+COMMAND: node scoreflow/maintenance/2026-10-17/experience-3/ui-regression.cjs scoreflow-3-release/app.js scoreflow-3-release/index.html
+PASS settings show saved key without exposing it
+PASS saving clears typed API key and updates visible sending status
+PASS unsaved changes block email test
+PASS test sends only recipient to saved configuration endpoint
+PASS remove key disables automatic sending in the same request
+PASS server errors appear as text and release busy button
+PASS managed default hides provider credentials in optional advanced settings
+PASS simple managed form sends name and contact without external credentials
+PASS advanced selector reveals custom provider only on request
+{"passed":9,"failed":0}
+
+COMMAND: node scoreflow/maintenance/2026-10-17/experience-3/navigation-regression.cjs scoreflow-3-release/app.js scoreflow-3-release/index.html
+PASS navigation buttons keep accessible names with decorative icons
+PASS mobile navigation opens and Escape restores toggle focus
+PASS choosing a module closes navigation and marks current page
+PASS hero primary action opens working control station
+PASS preparation progress checks active judges against required minimum
+PASS slow registration response cannot overwrite a newly selected module
+PASS feedback messages are nonblocking, escaped and dismissible
+PASS leaving dashboard for configuration releases mobile scroll lock
+{"passed":8,"failed":0}

@@ -41,3 +41,17 @@ Questo verifica il percorso reale app → API Resend e il comportamento del dest
 Dopo il test: impostazioni QA email_enabled=false, licenza QA active=false ed expires_at aggiornato, organizzazione rinominata COLLAUDO EMAIL 19-10-2026 — CHIUSO. Controllo finale SQL conferma questi stati e last_test_status=accepted. Nessun dato eliminato; traccia del test conservata.
 
 I tre record aggiunti inizialmente alla zona padre dynamiczen.it sono rimasti presenti; sono ridondanti e mascherati dalla zona autonoma scoreflow.dynamiczen.it. I record efficaci sono quelli della zona dedicata. Non sono stati rimossi record preesistenti né modificati MX, nameserver o altri siti.
+
+## Casella reale: verifica finale completata
+
+Dopo autorizzazione esplicita dell’utente, inviata una sola email di prova alla sua casella reale. Riutilizzata la stessa organizzazione QA con licenza tecnica riattivata per dieci minuti e invii automatici sempre disabilitati.
+
+Verifiche attraverso il connettore Gmail della casella destinataria:
+
+- messaggio presente in INBOX e CATEGORY_UPDATES, senza etichetta SPAM;
+- nome mittente Freestyle Academy ASD · ScoreFlow e indirizzo tecnico notifiche@scoreflow.dynamiczen.it;
+- Reply-To corrispondente all’indirizzo della società destinataria;
+- Authentication-Results: SPF pass, DKIM pass, DMARC pass;
+- una sola chiamata di invio, protetta localmente da un marcatore per evitare ripetizioni accidentali.
+
+Licenza QA disattivata di nuovo al termine. Il servizio centrale resta attivo. Il risultato vale per questa singola consegna: non garantisce la stessa classificazione per tutti i provider o tutte le comunicazioni future. Nessun dettaglio privato della casella o identificativo Gmail pubblicato nel repository.

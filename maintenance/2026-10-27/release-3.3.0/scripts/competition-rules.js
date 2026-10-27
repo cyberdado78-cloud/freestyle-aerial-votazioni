@@ -17,9 +17,9 @@
   add('elite','Elite',6,null,210,360);
   const criterionNames = ['Coreografia','Tecnica','Tricks','Immagine','Presenza scenica','Performance generale'];
   function preset() {
-    return { enabled:true, source:'FAC 2026', categories:{}, criteriaMode:'average', penaltyMin:1, penaltyMax:10,
+    return { enabled:true, source:'FAC 2026 — master gara', categories:{}, criteriaMode:'sum', penaltyMin:0.5, penaltyMax:10,
       minimumEntries:3, singleFee:60, duoFee:100, coachRatio:3, videoMinSeconds:90,
-      tieBreakIds:['fac-5','fac-1','fac-0'], decisionsConfirmed:false };
+      tieBreakIds:['fac-5','fac-1','fac-0'], decisionsConfirmed:true };
   }
   function criteria() { return criterionNames.map((name,i) => ({id:`fac-${i}`,name,min:1,max:10,weight:1,decimals:1})); }
   function ageAt(birth, at) {

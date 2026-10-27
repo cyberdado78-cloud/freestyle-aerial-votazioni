@@ -12,13 +12,16 @@ Prima dell'approvazione roster, il server verifica disciplina, categoria associa
 
 Classifiche e CSV separano disciplina e categoria. A pari totale, lo spareggio usa la media di Performance generale, Tecnica, Coreografia, in quest'ordine. La parità residua mantiene la stessa posizione; nelle finali vengono inclusi tutti i pari merito alla soglia. Risultati incompleti e ritirati non ricevono posizione. Il voto pubblico rimane separato come nella 3.2.
 
-Sono configurabili somma/media dei criteri e somma/media fra giudici. Prima di votare occorre confermare il metodo: il PDF non scioglie questa ambiguità. Le penalità si sottraggono al totale di ogni giudice, con minimo/massimo configurabili e motivazione. Valori invalidi vengono respinti anche dal server. Regole, criteri, categorie e discipline sono bloccati dopo il primo voto sul salvataggio autenticato.
+Il preset applica il metodo riscontrato nel master FAC 2026: somma dei sei criteri su 60, sottrazione della penalità di ciascun giudice, media aritmetica dei tre totali; visualizzazione a due decimali. Il metodo è già confermato dalla fonte, senza richiedere una nuova scelta. Restano configurabili varianti per eventi successivi. Nel master sono presenti penalità 0,5 e 0,7: il preset usa minimo 0,5 (modificabile con passo 0,1), diversamente dal minimo 1 del PDF. Questa è una differenza documentata fra prassi e regolamento, non una modifica del PDF. Le penalità si sottraggono al totale di ogni giudice, con minimo/massimo configurabili e motivazione. Valori invalidi vengono respinti anche dal server. Regole, criteri, categorie e discipline sono bloccati dopo il primo voto sul salvataggio autenticato.
 
 ## Fonti
 
 - Email inviata il 22 gennaio 2026: https://mail.google.com/mail/u/?authuser=freestyleaerialcompetition%40gmail.com#all/19be56439a14df85
 - PDF indicato dal sito: https://www.freestyle-academy.it/_downloads/912930ddb3669e4dc35bd736e53f955a
 - Canva: https://www.canva.com/d/46vknrM-A-LnOes
+
+- Master gara, tab VOTI_GIUDICI e RISULTATI: https://docs.google.com/spreadsheets/d/1h49cuxz5Wt1nrpUBgJPZhEq0w2Rhw6z5GKzB2oxY0KI/edit
+- Verifica del 27 ottobre 2026: tutti i 131 risultati numerici completi nelle righe 2–160 coincidono con la media dei tre totali a due decimali. Sono presenti righe storiche con test_mode ON e alcune incongruenze di trascrizione nei voti: nessuna importazione o correzione automatica dello storico.
 
 ## Da configurare o sviluppare separatamente
 

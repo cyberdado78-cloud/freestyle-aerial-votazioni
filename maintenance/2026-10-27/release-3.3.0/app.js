@@ -2523,14 +2523,14 @@
     const r=event.competitionRules;
     if (!r?.enabled) return `<article class="dash-card"><h3>Regole della competizione</h3><p>Collega categorie, ammissione e punteggi al regolamento FAC 2026. Le date delle iscrizioni si configurano nella sezione Iscrizioni.</p><button class="button primary" id="facActivate">Prepara profilo FAC 2026</button></article>`;
     const locked=event.scores.length>0;
-    return `<article class="dash-card"><h3>Regole FAC 2026</h3><p>Spareggio: Performance generale → Tecnica → Coreografia. Una parità residua mantiene la stessa posizione. Classifiche distinte per disciplina.</p><p>Le verifiche video e requisiti restano affidate alla regia. Sotto il minimo di partecipanti occorre decidere l’accorpamento o l’annullamento; nessun rimborso viene disposto automaticamente.</p>
+    return `<article class="dash-card"><h3>Regole FAC 2026</h3><p>Metodo recuperato dal master di gara: somma dei sei criteri (massimo 60), meno la penalità del giudice, poi media dei totali dei tre giudici. Risultato mostrato con due decimali. Nel master sono presenti penalità inferiori a 1 punto, comprese 0,5 e 0,7.</p><p>Spareggio: Performance generale → Tecnica → Coreografia. Una parità residua mantiene la stessa posizione. Classifiche distinte per disciplina.</p><p>Le verifiche video e requisiti restano affidate alla regia. Sotto il minimo di partecipanti occorre decidere l’accorpamento o l’annullamento; nessun rimborso viene disposto automaticamente.</p>
     <form id="facSettings" class="operational-form"><label>Calcolo dei sei criteri<select id="facMode" ${locked?'disabled':''}><option value="average" ${r.criteriaMode==='average'?'selected':''}>Media dei criteri</option><option value="sum" ${r.criteriaMode==='sum'?'selected':''}>Somma dei criteri</option></select></label>
     <label>Calcolo fra giudici<select id="facAggregation" ${locked?'disabled':''}>${['average','sum'].map(v=>`<option value="${v}" ${event.scoring.aggregation===v?'selected':''}>${v==='average'?'Media':'Somma'}</option>`).join('')}</select></label>
     <label><input id="facConfirmed" type="checkbox" ${r.decisionsConfirmed?'checked':''} ${locked?'disabled':''}>Confermo il metodo di calcolo e la penalità sottratta a ogni totale giudice</label>
-    ${[['penaltyMin','Penalità minima',1],['penaltyMax','Penalità massima',10],['minimumEntries','Minimo partecipanti per disciplina e categoria',3],['singleFee','Quota singolo (€)',60],['duoFee','Quota duo (€)',100],['coachRatio','Atleti per pass coach',3],['videoMinSeconds','Durata minima video entry (secondi)',90]].map(([key,label,def])=>`<label>${label}<input data-fac-setting="${key}" type="number" min="${key.includes('Fee')?'0':'1'}" max="10000" step="1" value="${Number(r[key] ?? def)}" required ${locked?'disabled':''}></label>`).join('')}
+    ${[['penaltyMin','Penalità minima',0.5],['penaltyMax','Penalità massima',10],['minimumEntries','Minimo partecipanti per disciplina e categoria',3],['singleFee','Quota singolo (€)',60],['duoFee','Quota duo (€)',100],['coachRatio','Atleti per pass coach',3],['videoMinSeconds','Durata minima video entry (secondi)',90]].map(([key,label,def])=>`<label>${label}<input data-fac-setting="${key}" type="number" min="${key.startsWith('penalty')||key.includes('Fee')?'0':'1'}" max="10000" step="${key.startsWith('penalty')?'0.1':'1'}" value="${Number(r[key] ?? def)}" required ${locked?'disabled':''}></label>`).join('')}
     ${event.categories.map(c=>`<label>${escapeHtml(c.name)}<select data-fac-category="${escapeHtml(c.id)}" ${locked?'disabled':''}><option value="">Da associare</option>${ScoreFlowRules.catalog.map(spec=>`<option value="${spec.key}" ${r.categories[c.id]===spec.key?'selected':''}>${spec.name}</option>`).join('')}</select></label>`).join('')}
     <button class="button primary" ${locked?'disabled':''}>Salva regole</button></form>
-    <p>${locked?'Regole bloccate: sono già presenti voti.':r.decisionsConfirmed?'Metodo di calcolo confermato.':'Conferma il metodo di calcolo prima di votare: il testo 2026 non distingue chiaramente somma e media.'}</p>
+    <p>${locked?'Regole bloccate: sono già presenti voti.':r.decisionsConfirmed?'Metodo di calcolo confermato.':'Metodo non confermato: ripristina o verifica le impostazioni del master FAC 2026.'}</p>
     <h4>Controllo categorie</h4>${ScoreFlowRules.groups(event).map(g=>{const n=event.participants.filter(p=>ScoreFlowRules.inGroup(p,g)&&!['dns','disqualified'].includes(p.status)).length;return `<p>${escapeHtml(g.name)}: ${n} ${n<r.minimumEntries?'— sotto il minimo, decisione della regia necessaria':''}</p>`;}).join('')}
     <p>Quote di riferimento: singolo ${Number(r.singleFee)} €, duo ${Number(r.duoFee)} €. Pass coach: uno ogni ${Number(r.coachRatio)} atleti. Le quote non registrano automaticamente un pagamento.</p></article>`;
   }
@@ -2543,11 +2543,12 @@
       event.competitionRules=ScoreFlowRules.preset();
       event.scoring.criteria=ScoreFlowRules.criteria();
       event.scoring.aggregation='average';
+      event.scoring.minimumJudges=3;
       event.scoring.penalties={enabled:true,noteRequired:true};
       if(!event.categories.length) event.categories=ScoreFlowRules.catalog.map(s=>({id:uid('category'),name:s.name}));
       if(!event.participants.length) event.disciplines=['Cerchio','Tessuti'];
       event.categories.forEach(c=>{const spec=ScoreFlowRules.catalog.find(s=>s.name.toLowerCase().replace(/[^a-z0-9]/g,'')===c.name.toLowerCase().replace(/[^a-z0-9]/g,''));if(spec) event.competitionRules.categories[c.id]=spec.key;});
-      saveRuntime(organization);renderEventDashboard(organization,'Profilo FAC preparato: associa le categorie e conferma il metodo di calcolo.');
+      saveRuntime(organization);renderEventDashboard(organization,'Profilo FAC preparato con il calcolo del master 2026. Associa le categorie.');
     });
     $("#facSettings")?.addEventListener('submit', e=>{
       e.preventDefault();if(event.scores.length) return;

@@ -6,11 +6,14 @@ const event={id:'event',competitionRules:R.preset(),scoring:{criteria:R.criteria
 event.competitionRules.categories.teen='teen-base';
 const values=Object.fromEntries(R.criteria().map(c=>[c.id,8]));
 const score={id:'vote',values,penalty:0};
-assert(R.scoreErrors(event,score).length);event.competitionRules.decisionsConfirmed=true;
+assert.equal(event.competitionRules.criteriaMode,'sum');
+event.competitionRules.decisionsConfirmed=false;assert(R.scoreErrors(event,score).length);event.competitionRules.decisionsConfirmed=true;
 assert.deepEqual(R.scoreErrors(event,score),[]);
-assert.equal(R.judgeScore(event,score),8);
+assert.equal(R.judgeScore(event,score),48);
 event.competitionRules.criteriaMode='sum';assert.equal(R.judgeScore(event,{...score,penalty:2}),46);event.competitionRules.criteriaMode='average';
-for(const penalty of [-1,0.5,11,Infinity]) assert(R.scoreErrors(event,{...score,penalty,note:'reason'}).length);
+for(const penalty of [-1,0.4,11,Infinity]) assert(R.scoreErrors(event,{...score,penalty,note:'reason'}).length);
+assert.deepEqual(R.scoreErrors(event,{...score,penalty:0.5,note:'Costume'}),[]);
+assert.deepEqual(R.scoreErrors(event,{...score,penalty:0.7,note:'Livello'}),[]);
 assert(R.scoreErrors(event,{...score,penalty:1}).length);
 assert(R.scoreErrors(event,{...score,values:{...values,'fac-0':10.01}}).length);
 assert.equal(R.ageAt('2013-04-19','2026-04-18'),12);assert.equal(R.ageAt('2013-04-19','2026-04-19'),13);assert.equal(R.ageAt('2013-02-30','2026-04-19'),null);

@@ -7,15 +7,17 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check scripts/i18n.js",
-    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs",
+    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs",
     "license:create": "node scripts/create-license.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.76.1",
+    "mammoth": "1.11.0",
+    "pdf-parse": "2.4.5",
     "qrcode": "1.5.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.16.0 <21 || >=22.3.0"
   },
   "devDependencies": {
     "jsdom": "26.1.0"

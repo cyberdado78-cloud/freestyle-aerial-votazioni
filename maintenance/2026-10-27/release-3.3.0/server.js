@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 const CompetitionRules = require('./scripts/competition-rules');
+const Regulations = require('./scripts/regulation-import');
 const { databaseConfigured, getSupabase } = require('./db');
 
 const port = Number(process.env.PORT) || 3000;
@@ -1126,7 +1127,7 @@ async function handleApi(request, response, requestUrl) {
     const auth = await authenticatedTenant(request, response, filesRoute.tenantKey);
     if (!auth) return true;
     const entitlement=await trialEntitlements(auth.supabase,filesRoute.tenantKey);
-    if(entitlement?.status==='trialing' && !['brand'].includes(request.headers['x-file-purpose']) && !String(request.headers['x-file-purpose'] || '').startsWith('athletes/')) throw accountFailure('Nella prova sono inclusi gli allegati delle iscrizioni e il logo. L’archivio documenti evento richiede una licenza.',403);
+    if(entitlement?.status==='trialing' && !['brand','event-rules'].includes(request.headers['x-file-purpose']) && !String(request.headers['x-file-purpose'] || '').startsWith('athletes/')) throw accountFailure('Nella prova sono inclusi gli allegati delle iscrizioni e il logo. L’archivio documenti evento richiede una licenza.',403);
     const body = await readBufferBody(request);
     if (!body.length) {
       sendJson(response, 400, { error: 'empty-file', message: 'Il file è vuoto.' });
@@ -1136,6 +1137,12 @@ async function handleApi(request, response, requestUrl) {
     const safeName = originalName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'file';
     const purpose = String(request.headers['x-file-purpose'] || 'documents').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 50) || 'documents';
     const contentType = String(request.headers['content-type'] || 'application/octet-stream').slice(0, 120);
+    let extractedText=null, extractionWarning=null;
+    if(purpose==='event-rules'){
+      if(!/\.(pdf|docx)$/i.test(originalName)||body.length>10*1024*1024)throw accountFailure('Regolamento: PDF o DOCX, massimo 10 MB.',400);
+      try{extractedText=await require('./scripts/extract-regulation.cjs')(body,originalName);if(!extractedText.trim())extractionWarning='Il documento non contiene testo leggibile. Incolla il testo; le scansioni richiedono OCR.';}
+      catch(error){extractionWarning=error.message;}
+    }
     const storagePath = `${filesRoute.tenantKey}/${purpose}/${crypto.randomUUID()}-${safeName}`;
     const { error } = await auth.supabase.storage.from(storageBucket).upload(storagePath, body, { contentType, upsert: false });
     if (error) {
@@ -1143,7 +1150,7 @@ async function handleApi(request, response, requestUrl) {
       sendJson(response, missingBucket ? 503 : 502, { error: missingBucket ? 'storage-schema-required' : 'storage-upload-error', message: missingBucket ? 'Manca il bucket ScoreFlow in Supabase. Esegui lo schema 2.5.' : 'Caricamento cloud non riuscito.' });
       return true;
     }
-    sendJson(response, 201, { path: storagePath, name: originalName, size: body.length, type: contentType, provider: 'supabase-storage' });
+    sendJson(response, 201, { path: storagePath, name: originalName, size: body.length, type: contentType, provider: 'supabase-storage', extractedText, extractionWarning });
     return true;
   }
 
@@ -1305,6 +1312,11 @@ async function handleApi(request, response, requestUrl) {
     if (!body.state || typeof body.state !== 'object' || !Number.isInteger(expectedRevision)) {
       sendJson(response, 400, { error: 'invalid-state' });
       return true;
+    }
+    for(const event of body.state.events||[])if(event.competitionRules?.profile==='custom'){
+      const r=event.competitionRules;
+      const errors=Regulations.validate({name:r.source,criteria:event.scoring?.criteria,criteriaMode:r.criteriaMode,aggregation:event.scoring?.aggregation,minimumJudges:event.scoring?.minimumJudges,penaltyMin:r.penaltyMin,penaltyMax:r.penaltyMax,disciplines:event.disciplines,categories:r.customCatalog,tieBreakIds:r.tieBreakIds});
+      if(errors.length)throw accountFailure(errors.join(' '),400);
     }
     CompetitionRules.validateState(stateFromRow(row.state_json), body.state);
     const { data: updated, error: updateError } = await supabase

@@ -118,3 +118,5 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,t
 .score-audit-row{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;padding:.75rem 0;border-bottom:1px solid #eef1f5}
 .score-audit-row small{grid-column:1/-1;color:#667085}
 @media(max-width:720px){.top-actions .language-picker span,.registration-actions .language-picker span{display:none}.language-picker select{min-width:6.4rem}.qr-panel{grid-template-columns:1fr}}
+
+.regulation-assistant{margin-top:24px}.regulation-assistant label{display:block;margin:12px 0}.regulation-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.regulation-table{overflow-x:auto;margin:16px 0}.regulation-table table{width:100%;border-collapse:collapse}.regulation-table th,.regulation-table td{padding:8px;text-align:left}.regulation-table input{min-width:80px;width:100%}.regulation-table td:first-child input{min-width:160px}.regulation-assistant details{margin:16px 0;padding:12px;border:1px solid #ccc;border-radius:10px}.regulation-assistant pre{max-height:300px;overflow:auto}

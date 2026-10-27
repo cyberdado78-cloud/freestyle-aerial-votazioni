@@ -32,9 +32,17 @@
     const rules = event.competitionRules;
     if (!rules?.enabled) return [];
     const errors=[];
-    const spec = catalog.find(x=>x.key===rules.categories?.[profile.categoryId]);
+    const spec = (rules.profile==='custom'?rules.customCatalog:catalog).find(x=>x.key===rules.categories?.[profile.categoryId]);
     if (!spec) return ['Associa la categoria a un profilo del regolamento.'];
     if (!(event.disciplines || []).includes(profile.discipline)) errors.push('Disciplina non prevista per questo evento.');
+    if(rules.profile==='custom'){
+      const age=ageAt(profile.birthDate,String(profile.registeredAt||registrationDate||'').slice(0,10));
+      if((spec.minAge!==null||spec.maxAge!==null)&&(age===null||(spec.minAge!==null&&age<spec.minAge)||(spec.maxAge!==null&&age>spec.maxAge))) errors.push('Età fuori dai limiti della categoria alla data di iscrizione.');
+      const duration=Number(profile.attachments?.music?.durationSeconds||profile.performanceDuration);
+      if((spec.minSeconds!==null||spec.maxSeconds!==null)&&(!Number.isFinite(duration)||duration<=0||(spec.minSeconds!==null&&duration<spec.minSeconds)||(spec.maxSeconds!==null&&duration>spec.maxSeconds))) errors.push('Durata fuori dai limiti della categoria.');
+      if(!profile.rulesAccepted) errors.push('Accettazione del regolamento mancante.');
+      return errors;
+    }
     const age=ageAt(profile.birthDate, String(profile.registeredAt || registrationDate || '').slice(0,10));
     if (spec.minAge !== null && (age===null || age<spec.minAge || (spec.maxAge!==null && age>spec.maxAge))) errors.push(`Età non valida alla data di iscrizione (${spec.minAge}–${spec.maxAge ?? '∞'} anni).`);
     const music=profile.attachments?.music;
@@ -51,6 +59,11 @@
   function scoreErrors(event, score) {
     if (!event.competitionRules?.enabled) return [];
     const errors=[];
+    if(event.competitionRules.profile==='custom'){
+      const version=event.rules?.versions?.find(v=>v.number===event.rules.activeVersion);
+      const c=version?.configuration,r=event.competitionRules;
+      if(!c||version.text!==event.rules.text||JSON.stringify(version.file)!==JSON.stringify(event.rules.file)||JSON.stringify(c.criteria)!==JSON.stringify(event.scoring.criteria)||c.criteriaMode!==r.criteriaMode||c.aggregation!==event.scoring.aggregation||c.minimumJudges!==event.scoring.minimumJudges||c.penaltyMin!==r.penaltyMin||c.penaltyMax!==r.penaltyMax||JSON.stringify(c.tieBreakIds)!==JSON.stringify(r.tieBreakIds))errors.push('Approva una nuova versione della configurazione prima di votare.');
+    }
     if (!event.competitionRules.decisionsConfirmed) errors.push("Conferma il metodo di calcolo nella sezione Evento e regolamento.");
     for(const c of event.scoring.criteria) {
       const raw=score.values?.[c.id], n=Number(raw), scale=10**Number(c.decimals || 0);
@@ -95,6 +108,7 @@
   function validateState(previous, incoming) {
     for (const event of incoming.events || []) {
       const old=(previous.events || []).find(e=>e.id===event.id);
+      if(old?.scores?.length && JSON.stringify(old.rules)!==JSON.stringify(event.rules)) throw Object.assign(new Error('Regolamento bloccato dopo il primo voto.'),{statusCode:409});
       if (old?.competitionRules?.enabled && old.scores?.length &&
         (JSON.stringify(old.competitionRules)!==JSON.stringify(event.competitionRules) || JSON.stringify(old.scoring)!==JSON.stringify(event.scoring) || JSON.stringify(old.categories)!==JSON.stringify(event.categories) || JSON.stringify(old.disciplines)!==JSON.stringify(event.disciplines)))
         throw Object.assign(new Error('Regole, criteri, categorie e discipline bloccati dopo il primo voto.'),{statusCode:409});

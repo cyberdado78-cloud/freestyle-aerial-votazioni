@@ -37,3 +37,23 @@ Il preset applica il metodo riscontrato nel master FAC 2026: somma dei sei crite
 `npm ci --ignore-scripts && npm test` nella cartella del pacchetto. Eseguiti controlli sintattici, regressioni 3.2, health, 20 test account, 12 test UI account, test FAC funzionali e rendering del pannello con JSDOM. Nessun test end-to-end sul database reale o su Hostinger, nessuna modifica ai dati reali. Nessuna nuova migrazione SQL: opzioni e verifiche usano JSON già esistenti. Rimane necessaria la migrazione 3.2 se non applicata.
 
 Pacchetto predisposto per revisione; non distribuito automaticamente. Prima del rilascio verificare su staging una pratica individuale e una scuola, l'approvazione roster, il salvataggio multi-dispositivo, CSV e stampa scheda.
+
+## Configurazione generale dal regolamento (27 ottobre)
+
+Il pannello Evento e regolamento ora offre un percorso per qualsiasi organizzatore, prima del modello FAC:
+
+- PDF e DOCX fino a 10 MB: originale nel bucket privato esistente, estrazione testo sul server, testo consultabile anche dai giudici. Nessun servizio IA esterno e nessuna chiave API aggiuntiva.
+- Analisi deterministica iniziale in italiano/inglese: riconosce indicazioni esplicite di somma/media dei criteri e giudici, numero giudici, intervallo penalità e righe etichettate di categorie, discipline e criteri. Ogni riconoscimento mostra citazione e numero di riga del testo estratto. Le righe non corrispondono necessariamente alle pagine PDF.
+- Riepilogo modificabile: criteri, intervalli, pesi, decimali, aggregazione fra giudici, penalità, priorità spareggi, categorie, discipline, età alla data di iscrizione e durate in secondi. Valori non riconosciuti conservano le impostazioni esistenti e sono segnalati. Indicazioni contrastanti non vengono risolte automaticamente.
+- Conferma esplicita prima dell'applicazione; blocco dopo il primo voto, anche lato server. Se cambia il testo dopo l'analisi, serve una nuova proposta. Una versione approvata conserva testo, riferimento al file e configurazione. Una configurazione di voto modificata fuori dal percorso richiede nuova approvazione.
+- Applicazione alle schede giudice, calcolo e spareggi, classifiche per disciplina/categoria e controlli server di ammissione su età/durata. Gli atleti già presenti non vengono eliminati né spostati implicitamente.
+- Modelli riutilizzabili via esportazione/importazione di file ScoreFlow JSON, senza atleti, risultati o testo sorgente. Importazione sempre da verificare prima di applicare.
+- Caricamento del regolamento incluso nella prova; restano gli altri limiti della prova, fra cui due categorie.
+
+### Limiti espliciti di questa prima implementazione
+
+Non è un interprete IA universale: clausole narrative, tabelle complesse, OCR e documenti protetti non vengono interpretati automaticamente. Il testo può essere incollato e la configurazione completata manualmente. Le età/durate sono editabili ma non estratte automaticamente; altre date di riferimento per l'età non sono ancora supportate. Quote, requisiti speciali, documenti obbligatori e scadenze non vengono impostati da questo importatore: rimangono le sezioni e i controlli esistenti. Il modello generale non incorpora i controlli speciali FAC video/duo/vittorie; il pannello lo esplicita prima della conferma. Le penalità sono sottratte per giudice prima dell'aggregazione, con soglia zero; altre politiche non sono ancora disponibili. Nuovi testi in italiano, traduzioni complete da completare prima di un lancio internazionale.
+
+L'estrazione usa un worker separato con limite di memoria e timeout 20 secondi; PDF oltre 100 pagine respinti. Un errore di estrazione mantiene disponibile l'originale e chiede testo leggibile. Non è stato attivato alcun nuovo servizio cloud. Richiesto Node >=20.16 <21 oppure >=22.3; dipendenze esatte pdf-parse 2.4.5 e mammoth 1.11.0.
+
+Test aggiunti: PDF e DOCX reali sintetici, riferimenti e conflitti, mancata conferma, cambio testo dopo analisi, applicazione punteggi ponderati, ammissione generica, preservazione iscritti, versioni, blocco dopo voto, schema modelli e rendering con testo ostile neutralizzato. Restano da verificare cloud/staging, upload effettivo autenticato e più dispositivi prima della distribuzione. Nessun documento di gara o dato storico dell'utente modificato.

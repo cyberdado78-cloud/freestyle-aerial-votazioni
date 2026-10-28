@@ -4,6 +4,15 @@
   else root.ScoreFlowRules = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
+  // JSON object key order is not meaningful and may change after database storage.
+  // Preserve array order: criterion/category/tie-break ordering remains significant.
+  function canonicalJson(value) {
+    const normalize = item => Array.isArray(item) ? item.map(normalize)
+      : item && typeof item === 'object'
+        ? Object.fromEntries(Object.keys(item).sort().map(key => [key, normalize(item[key])]))
+        : item;
+    return JSON.stringify(normalize(value));
+  }
   const catalog = [];
   const add = (key, name, minAge, maxAge, minSeconds, maxSeconds, duo = false) => catalog.push({key, name, minAge, maxAge, minSeconds, maxSeconds, duo});
   add('junior-a', 'Junior A', 7, 9, 150, 240);
@@ -62,7 +71,7 @@
     if(event.competitionRules.profile==='custom'){
       const version=event.rules?.versions?.find(v=>v.number===event.rules.activeVersion);
       const c=version?.configuration,r=event.competitionRules;
-      if(!c||version.text!==event.rules.text||JSON.stringify(version.file)!==JSON.stringify(event.rules.file)||JSON.stringify(c.criteria)!==JSON.stringify(event.scoring.criteria)||c.criteriaMode!==r.criteriaMode||c.aggregation!==event.scoring.aggregation||c.minimumJudges!==event.scoring.minimumJudges||c.penaltyMin!==r.penaltyMin||c.penaltyMax!==r.penaltyMax||JSON.stringify(c.tieBreakIds)!==JSON.stringify(r.tieBreakIds))errors.push('Approva una nuova versione della configurazione prima di votare.');
+      if(!c||version.text!==event.rules.text||canonicalJson(version.file)!==canonicalJson(event.rules.file)||canonicalJson(c.criteria)!==canonicalJson(event.scoring.criteria)||c.criteriaMode!==r.criteriaMode||c.aggregation!==event.scoring.aggregation||c.minimumJudges!==event.scoring.minimumJudges||c.penaltyMin!==r.penaltyMin||c.penaltyMax!==r.penaltyMax||canonicalJson(c.tieBreakIds)!==canonicalJson(r.tieBreakIds))errors.push('Approva una nuova versione della configurazione prima di votare.');
     }
     if (!event.competitionRules.decisionsConfirmed) errors.push("Conferma il metodo di calcolo nella sezione Evento e regolamento.");
     for(const c of event.scoring.criteria) {
@@ -108,13 +117,13 @@
   function validateState(previous, incoming) {
     for (const event of incoming.events || []) {
       const old=(previous.events || []).find(e=>e.id===event.id);
-      if(old?.scores?.length && JSON.stringify(old.rules)!==JSON.stringify(event.rules)) throw Object.assign(new Error('Regolamento bloccato dopo il primo voto.'),{statusCode:409});
+      if(old?.scores?.length && canonicalJson(old.rules)!==canonicalJson(event.rules)) throw Object.assign(new Error('Regolamento bloccato dopo il primo voto.'),{statusCode:409});
       if (old?.competitionRules?.enabled && old.scores?.length &&
-        (JSON.stringify(old.competitionRules)!==JSON.stringify(event.competitionRules) || JSON.stringify(old.scoring)!==JSON.stringify(event.scoring) || JSON.stringify(old.categories)!==JSON.stringify(event.categories) || JSON.stringify(old.disciplines)!==JSON.stringify(event.disciplines)))
+        (canonicalJson(old.competitionRules)!==canonicalJson(event.competitionRules) || canonicalJson(old.scoring)!==canonicalJson(event.scoring) || canonicalJson(old.categories)!==canonicalJson(event.categories) || canonicalJson(old.disciplines)!==canonicalJson(event.disciplines)))
         throw Object.assign(new Error('Regole, criteri, categorie e discipline bloccati dopo il primo voto.'),{statusCode:409});
       if (event.competitionRules?.enabled) {
-        const originals=new Map((old?.scores || []).map(s=>[s.id,JSON.stringify(s)]));
-        for (const score of event.scores || []) if (originals.get(score.id)!==JSON.stringify(score)) {
+        const originals=new Map((old?.scores || []).map(s=>[s.id,canonicalJson(s)]));
+        for (const score of event.scores || []) if (originals.get(score.id)!==canonicalJson(score)) {
           const errors=scoreErrors(event,score);
           if(errors.length) throw Object.assign(new Error(errors.join(' ')),{statusCode:400});
         }

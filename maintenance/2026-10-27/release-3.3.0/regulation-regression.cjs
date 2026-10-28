@@ -17,6 +17,23 @@ assert.throws(()=>R.apply({...event,scores:[score]},d,{text,confirmed:true}),/gi
 assert.throws(()=>R.apply({...event,participants:[{categoryId:'missing',discipline:'Danza'}]},d,{text,confirmed:true}),/Conserva/);
 assert.equal(R.apply(next,d,{text,confirmed:true}).rules.versions.length,2);
 const voted={...next,scores:[score]},changed=structuredClone(voted);changed.rules.text='changed';assert.throws(()=>Rules.validateState({events:[voted]},{events:[changed]}),/bloccato/);
+// A JSON database round-trip may reorder every object without changing its data.
+const reorderKeys=value=>Array.isArray(value)?value.map(reorderKeys):value&&typeof value==='object'
+  ?Object.fromEntries(Object.keys(value).reverse().map(key=>[key,reorderKeys(value[key])])):value;
+const persisted=reorderKeys(voted);
+const secondVote=structuredClone(voted);secondVote.scores.push({...score,id:'second'});
+assert.doesNotThrow(()=>Rules.validateState({events:[persisted]},{events:[secondVote]}));
+const mixed=structuredClone(next);mixed.scoring.criteria=reorderKeys(mixed.scoring.criteria);
+mixed.rules.file={name:'test.pdf',size:123};mixed.rules.versions[0].file={size:123,name:'test.pdf'};
+assert.deepEqual(Rules.scoreErrors(mixed,score),[]);
+for(const mutate of [e=>e.rules.text+=' changed',e=>e.scoring.criteria[0].max=9,
+  e=>e.competitionRules.penaltyMin=1,e=>e.categories[0].name='Changed',
+  e=>e.disciplines.reverse(),e=>e.scoring.criteria.reverse()]){
+ const altered=structuredClone(secondVote);mutate(altered);
+ assert.throws(()=>Rules.validateState({events:[persisted]},{events:[altered]}),/bloccat/);
+}
+const invalidVote=structuredClone(secondVote);invalidVote.scores[1].values={'rule-0':11,'rule-1':7};
+assert.throws(()=>Rules.validateState({events:[persisted]},{events:[invalidVote]}),/Voto non valido/);
 assert(R.validate({...d,minimumJudges:0}).length);assert(R.validate({...d,tieBreakIds:['unknown']}).length);assert(R.validate({...d,categories:[{...d.categories[0],maxAge:2}]}).length);
 const html=fs.readFileSync('index.html','utf8');assert(html.indexOf('scripts/regulation-import.js')>=0);assert(html.indexOf('scripts/regulation-import.js')<html.indexOf('./app.js'));
 const dom=new JSDOM(html,{url:'https://example.invalid',runScripts:'outside-only'}),w=dom.window;w.scrollTo=()=>{};

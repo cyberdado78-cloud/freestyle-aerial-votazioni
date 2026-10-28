@@ -57,3 +57,13 @@ Non è un interprete IA universale: clausole narrative, tabelle complesse, OCR e
 L'estrazione usa un worker separato con limite di memoria e timeout 20 secondi; PDF oltre 100 pagine respinti. Un errore di estrazione mantiene disponibile l'originale e chiede testo leggibile. Non è stato attivato alcun nuovo servizio cloud. Richiesto Node >=20.16 <21 oppure >=22.3; dipendenze esatte pdf-parse 2.4.5 e mammoth 1.11.0.
 
 Test aggiunti: PDF e DOCX reali sintetici, riferimenti e conflitti, mancata conferma, cambio testo dopo analisi, applicazione punteggi ponderati, ammissione generica, preservazione iscritti, versioni, blocco dopo voto, schema modelli e rendering con testo ostile neutralizzato. Restano da verificare cloud/staging, upload effettivo autenticato e più dispositivi prima della distribuzione. Nessun documento di gara o dato storico dell'utente modificato.
+
+## Correzione collaudo cloud — 28 ottobre 2026
+
+Nel collaudo autenticato dell’evento vuoto “Collaudo ScoreFlow”, upload PDF, estrazione, proposta, conferma e versionamento hanno funzionato. Inseriti un atleta e tre giudici fittizi. Primo voto via override 37,50 salvato; il secondo è comparso localmente e poi è stato respinto con “Regolamento bloccato dopo il primo voto”. Nessun voto da postazioni giudice o test iscrizione pubblica completato. Non completata la classifica.
+
+Riproduzione locale: il controllo basato su JSON.stringify respinge oggetti identici con chiavi in ordine diverso. Il round-trip JSON del database può cambiare tale ordine. Il confronto ora ordina ricorsivamente le chiavi degli oggetti, preservando l’ordine degli array e le differenze di valori. La correzione copre anche il controllo della configurazione approvata e i confronti delle regole, dei criteri e delle categorie.
+
+Regressione aggiunta: secondo voto dopo riordino delle chiavi accettato; modifica reale al testo, al criterio, alla penalità, alla categoria o all’ordine di discipline/criteri respinta; voto fuori intervallo respinto. npm test superato. Cache del modulo regole aggiornata a rules3. Da distribuire su Hostinger e ripetere il collaudo prima di considerarlo risolto in produzione.
+
+Il PDF originale FAC al precedente URL pubblico restituisce 404. Il test ha usato il PDF sintetico del repository e poi testo esplicitamente marcato come collaudo, non il regolamento ufficiale.

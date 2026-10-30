@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check scripts/i18n.js",
-    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs",
+    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs && node athlete-recovery-ui-regression.cjs",
     "license:create": "node scripts/create-license.js"
   },
   "dependencies": {

@@ -94,3 +94,13 @@ Regressione aggiunta: secondo voto dopo riordino delle chiavi accettato; modific
 
 Il PDF originale FAC al precedente URL pubblico restituisce 404. Il test ha usato il PDF sintetico del repository e poi testo esplicitamente marcato come collaudo, non il regolamento ufficiale.
 
+
+## Athlete password recovery — 30 October 2026
+
+- Athlete/coach accounts now have a separate email recovery form in IT/EN/FR/ES, including live language changes. Login failures remain visible instead of disappearing in a toast.
+- Recovery uses the existing managed email transport, independently of event notification settings. The public response is generic; sending happens after the response. Delivery failure is logged without tokens or account details. No email is sent by the regression suite.
+- Links expire after 30 minutes, are bound to the tenant/account/current password digest, and are consumed by an atomic conditional password update. Legacy sessions are revoked before updating; new sessions are password-bound so a concurrent login cannot retain old-password access. Profile, roster, files and scoring are unchanged.
+- Tests cover tampering, expiry, wrong tenant, repeated and concurrent consumption, legacy/concurrent session revocation, old/new login, rate limiting, cross-site requests, form errors, confirmation and translations. Existing full suites pass. Database/provider behavior is mocked: real reset delivery, database triggers and post-reset login still need live verification. Existing database trial guards may reject credential updates after trial expiry; no schema or entitlement changes are included.
+- Deploy only the applicable package, preserving the hosting dependency correction. The repository root is the 3.3 compatibility copy; maintenance/2026-10-30/release-3.4.0 retains the newer first-run/regulation setup. No production deployment or real password change was performed for this patch.
+
+- Password eye controls added to athlete login, individual/school signup, new password and confirmation. Independent accessible buttons reuse the existing organizer styling and translations; toggling preserves input and does not submit.

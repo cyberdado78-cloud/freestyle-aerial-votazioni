@@ -1,0 +1,28 @@
+const fs=require('node:fs'), assert=require('node:assert/strict'), {JSDOM}=require('jsdom');
+const dom=new JSDOM(fs.readFileSync('index.html','utf8'),{url:'https://scoreflow.dynamiczen.it/?register=qa-owner',runScripts:'outside-only'}),w=dom.window;
+w.TextEncoder=TextEncoder;w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.setInterval=()=>0;w.setTimeout=()=>0;
+let language='it',status=200;const requests=[];
+w.ScoreFlowI18n={observe:()=>{},translateDOM:()=>{},get language(){return language;},setLanguage:x=>language=x};
+w.fetch=async(url,options={})=>{requests.push({url,options});return{ok:status<400,status,text:async()=>JSON.stringify({message:status===401?'Email o password non corretti.':'OK'}),json:async()=>({message:status===401?'Email o password non corretti.':'OK'})};};
+w.eval(fs.readFileSync('app.js','utf8').replace('  initializeApplication();','  window.qa={renderAthletePortal,renderAthleteRecovery,showRegistrationPortal,initializeApplication,athleteAccessCopy};'));
+const config={tenantKey:'qa-owner',phase:'pre-registration',registration:{},event:{categories:[],disciplines:[]}},$=q=>w.document.querySelector(q),tick=()=>new Promise(r=>setImmediate(r));
+(async()=>{
+ await w.qa.renderAthletePortal(config);
+ for(const formId of ['athleteLoginForm','athleteSignupForm']) {
+   const form=$('#'+formId),input=form.querySelector('input[name=password]'),button=form.querySelector('.password-visibility');
+   let submissions=0;form.addEventListener('submit',e=>{e.preventDefault();submissions++;});
+   input.value='visibility-test';const before=requests.length;assert.equal(button.type,'button');assert.equal(button.getAttribute('aria-controls'),input.id);
+   button.click();assert.equal(input.type,'text');assert.equal(input.value,'visibility-test');assert.equal(button.getAttribute('aria-pressed'),'true');
+   button.click();assert.equal(input.type,'password');assert.equal(input.value,'visibility-test');assert.equal(submissions,0);assert.equal(requests.length,before);
+ }
+ assert.ok($('#athleteForgotPassword'));$('#athleteForgotPassword').click();assert.ok($('#athleteRecoveryForm input[type=email]'));assert.equal($('#athleteRecoveryForm input[type=password]'),null);
+ $('#athleteRecoveryForm input').value='test@example.invalid';await $('#athleteRecoveryForm').onsubmit({preventDefault(){},currentTarget:$('#athleteRecoveryForm')});assert.match($('#athleteRecoveryMessage').textContent,/30 minuti/);assert.equal(JSON.parse(Buffer.from(requests.at(-1).options.body.slice('scoreflow64:'.length),'base64').toString()).tenantKey,'qa-owner');assert.equal($('#athleteRecoveryForm button').disabled,true);
+ w.qa.renderAthleteRecovery(config,'test-token');const form=$('#athleteRecoveryForm');const toggles=form.querySelectorAll('.password-visibility');assert.equal(toggles.length,2);form.elements.password.value='kept';form.elements.confirmation.value='kept';toggles[0].click();assert.equal(form.elements.password.type,'text');assert.equal(form.elements.confirmation.type,'password');toggles[1].click();assert.equal(form.elements.confirmation.type,'text');toggles[0].click();toggles[1].click();assert.equal(form.elements.password.value,'kept');assert.equal(form.elements.confirmation.value,'kept');form.elements.password.value='new-password';form.elements.confirmation.value='different';let before=requests.length;await form.onsubmit({preventDefault(){},currentTarget:form});assert.equal(requests.length,before);assert.match($('#athleteRecoveryMessage').textContent,/non coincidono/);
+ form.elements.confirmation.value='new-password';status=400;await form.onsubmit({preventDefault(){},currentTarget:form});assert.match($('#athleteRecoveryMessage').textContent,/scaduto/);
+ assert.equal(form.querySelector('button[type=submit]').disabled,false);
+ status=200;w.localStorage.setItem('scoreflow.registration.session.qa-owner',JSON.stringify({token:'old'}));await form.onsubmit({preventDefault(){},currentTarget:form});assert.ok($('#athleteLoginForm'));assert.equal(w.localStorage.getItem('scoreflow.registration.session.qa-owner'),null);assert.match($('#athleteLoginMessage').textContent,/Password aggiornata/);assert.equal(form.elements.password.value,'');
+ status=401;$('#athleteLoginForm input[type=email]').value='wrong@example.invalid';$('#athleteLoginForm input[type=password]').value='wrong-password';$('#athleteLoginForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));await tick();assert.match($('#athleteLoginMessage').textContent,/credenziali create/);assert.equal($('.sf-toast'),null);
+ for(const lang of ['it','en','fr','es']){language=lang;w.qa.renderAthleteRecovery(config);assert.equal($('#athleteRecoveryBack').textContent,w.qa.athleteAccessCopy().back);}
+ w.eval(fs.readFileSync('scripts/i18n.js','utf8'));w.ScoreFlowI18n.setLanguage('it');w.qa.renderAthleteRecovery(config,'test-token');const passwordInput=$('#athleteRecoveryForm input[name=password]');passwordInput.value='preserve-this-password';w.ScoreFlowI18n.setLanguage('en');assert.equal($('#athleteRecoveryBack').textContent,'Back to athlete sign-in');assert.equal(passwordInput.value,'preserve-this-password');w.ScoreFlowI18n.setLanguage('it');assert.equal($('#athleteRecoveryBack').textContent,'Torna all’accesso atleta');
+ dom.window.close();console.log('Athlete recovery UI: request, mismatch, expiry, retry, reset, persistent login error and four languages OK');
+})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1;});

@@ -1344,6 +1344,27 @@
     }
   }
 
+  function addAthletePasswordToggles(container) {
+    container.querySelectorAll('input[type="password"]').forEach(input => {
+      if (input.closest('.password-control')) return;
+      input.id = input.id || `${input.form.id}-${input.name}`;
+      const control = document.createElement('span'); control.className = 'password-control';
+      input.before(control); control.append(input);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'password-visibility';
+      button.setAttribute('aria-label', 'Mostra password');
+      button.setAttribute('aria-controls', input.id); button.setAttribute('aria-pressed', 'false');
+      button.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="m3 3 18 18"/></svg>';
+      button.onclick = () => {
+        const visible = input.type === 'password'; input.type = visible ? 'text' : 'password';
+        button.setAttribute('aria-pressed', String(visible));
+        button.setAttribute('aria-label', visible ? 'Nascondi password' : 'Mostra password');
+        window.ScoreFlowI18n?.translateDOM(button);
+      };
+      control.append(button); window.ScoreFlowI18n?.translateDOM(button);
+    });
+  }
+
   function athleteAccessCopy() {
     const keys = ['forgot','recover','reset','email','password','confirm','send','save','back','sent','done','mismatch','loginError','resetError','serviceError','busy'];
     const values = {
@@ -1362,6 +1383,7 @@
       `<label>${escapeHtml(copy.password)}<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><label>${escapeHtml(copy.confirm)}<input name="confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>` :
       `<label>${escapeHtml(copy.email)}<input name="email" type="email" autocomplete="email" maxlength="254" required></label>`}
       <p id="athleteRecoveryMessage" role="status" aria-live="polite"></p><button type="submit" class="button primary">${escapeHtml(resetting ? copy.save : copy.send)}</button></form><button id="athleteRecoveryBack" type="button" class="button ghost">${escapeHtml(copy.back)}</button>${resetting ? `<button id="athleteRecoveryAgain" type="button" class="button ghost">${escapeHtml(copy.forgot)}</button>` : ''}</article>`;
+    addAthletePasswordToggles(content);
     $('#athleteRecoveryBack').onclick = () => renderAthletePortal(config);
     if (resetting) $('#athleteRecoveryAgain').onclick = () => renderAthleteRecovery(config);
     $('#athleteRecoveryForm').onsubmit = async event => {
@@ -1415,6 +1437,7 @@
     }
     $("#registrationLogout").classList.add("hidden");
     content.innerHTML = `<div class="registration-entry-grid"><article class="registration-card"><p class="eyebrow">Hai già le credenziali?</p><h2>Accedi alla scheda</h2><form id="athleteLoginForm" class="operational-form"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button primary" type="submit">Accedi</button><p id="athleteLoginMessage" role="status" aria-live="polite"></p></form><button id="athleteForgotPassword" class="button ghost" type="button">${escapeHtml(athleteAccessCopy().forgot)}</button></article><article class="registration-card register-intro"><p class="eyebrow">Nuova preiscrizione</p><h2>${profileOpen ? "Crea la tua scheda" : "Preiscrizioni chiuse"}</h2><p>${escapeHtml(config.registration?.instructions || "")}</p>${profileOpen ? '<button class="button primary show-signup" type="button">Inizia la compilazione</button>' : open ? '<span class="state-badge delayed">Gli account esistenti possono completare i documenti</span>' : '<span class="state-badge delayed">Portale chiuso</span>'}</article></div><article id="signupCard" class="registration-card hidden"><div class="registration-card-head"><div><p class="eyebrow">Scegli il tipo di account</p><h2>Preiscrizione</h2></div><button class="button ghost hide-signup" type="button">Chiudi</button></div><div class="registration-type-choice"><button type="button" class="active" data-account-type="individual"><strong>Atleta singolo</strong><small>Una sola scheda personale</small></button><button type="button" data-account-type="group"><strong>Scuola / coach</strong><small>Gestisci più atleti con un accesso</small></button></div><label id="plannedAthletesWrap" class="planned-athletes hidden">Numero indicativo di atleti<select id="plannedAthletes"><option value="5">5 atleti</option><option value="10">10 atleti</option><option value="20">20 atleti</option><option value="custom">Da definire</option></select></label><form id="athleteSignupForm" class="athlete-registration-form" data-account-type="individual">${athleteProfileFields(config, {}, true)}<div class="wide portal-actions"><button class="button primary" type="submit">Crea credenziali e salva scheda</button></div></form></article>`;
+    addAthletePasswordToggles(content);
     $("#athleteForgotPassword").onclick = () => renderAthleteRecovery(config);
     $("#athleteLoginForm").addEventListener("submit", async event => {
       event.preventDefault(); const data = new FormData(event.currentTarget);

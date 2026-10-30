@@ -177,6 +177,62 @@
     }
   };
 
+  // Athlete recovery labels also update when the language changes in an open form.
+  Object.assign(dictionaries.en, {
+  "Password dimenticata?": "Forgot password?",
+  "Recupera accesso atleta": "Recover athlete access",
+  "Nuova password atleta": "New athlete password",
+  "Email della scheda atleta": "Athlete account email",
+  "Nuova password (8–128 caratteri)": "New password (8–128 characters)",
+  "Conferma nuova password": "Confirm new password",
+  "Invia collegamento": "Send link",
+  "Salva nuova password": "Save new password",
+  "Torna all’accesso atleta": "Back to athlete sign-in",
+  "Se l’indirizzo è registrato per questo evento, riceverai un collegamento valido per 30 minuti. Controlla anche lo spam.": "If this address is registered for this event, you will receive a link valid for 30 minutes. Check your spam folder too.",
+  "Password aggiornata. Accedi alla tua scheda con la nuova password.": "Password updated. Sign in to your profile with your new password.",
+  "Le password non coincidono.": "Passwords do not match.",
+  "Email o password non corretti per la scheda atleta. Usa le credenziali create durante la preiscrizione oppure recupera la password.": "Incorrect athlete email or password. Use the credentials created during registration or reset your password.",
+  "Collegamento scaduto o già utilizzato. Richiedi un nuovo recupero.": "Link expired or already used. Request a new recovery link.",
+  "Operazione non riuscita. Riprova più tardi.": "Unable to complete the request. Please try again later.",
+  "Troppi tentativi. Riprova tra 15 minuti.": "Too many attempts. Try again in 15 minutes."
+});
+  Object.assign(dictionaries.fr, {
+  "Password dimenticata?": "Mot de passe oublié ?",
+  "Recupera accesso atleta": "Récupérer l’accès athlète",
+  "Nuova password atleta": "Nouveau mot de passe athlète",
+  "Email della scheda atleta": "E-mail du compte athlète",
+  "Nuova password (8–128 caratteri)": "Nouveau mot de passe (8–128 caractères)",
+  "Conferma nuova password": "Confirmer le nouveau mot de passe",
+  "Invia collegamento": "Envoyer le lien",
+  "Salva nuova password": "Enregistrer le mot de passe",
+  "Torna all’accesso atleta": "Retour à la connexion athlète",
+  "Se l’indirizzo è registrato per questo evento, riceverai un collegamento valido per 30 minuti. Controlla anche lo spam.": "Si cette adresse est inscrite à cet événement, vous recevrez un lien valable 30 minutes. Vérifiez aussi les courriers indésirables.",
+  "Password aggiornata. Accedi alla tua scheda con la nuova password.": "Mot de passe mis à jour. Connectez-vous avec votre nouveau mot de passe.",
+  "Le password non coincidono.": "Les mots de passe ne correspondent pas.",
+  "Email o password non corretti per la scheda atleta. Usa le credenziali create durante la preiscrizione oppure recupera la password.": "E-mail ou mot de passe athlète incorrect. Utilisez les identifiants créés à l’inscription ou récupérez le mot de passe.",
+  "Collegamento scaduto o già utilizzato. Richiedi un nuovo recupero.": "Lien expiré ou déjà utilisé. Demandez un nouveau lien.",
+  "Operazione non riuscita. Riprova più tardi.": "Opération impossible. Réessayez plus tard.",
+  "Troppi tentativi. Riprova tra 15 minuti.": "Trop de tentatives. Réessayez dans 15 minutes."
+});
+  Object.assign(dictionaries.es, {
+  "Password dimenticata?": "¿Olvidaste tu contraseña?",
+  "Recupera accesso atleta": "Recuperar acceso de atleta",
+  "Nuova password atleta": "Nueva contraseña de atleta",
+  "Email della scheda atleta": "Correo de la cuenta de atleta",
+  "Nuova password (8–128 caratteri)": "Nueva contraseña (8–128 caracteres)",
+  "Conferma nuova password": "Confirma la nueva contraseña",
+  "Invia collegamento": "Enviar enlace",
+  "Salva nuova password": "Guardar contraseña",
+  "Torna all’accesso atleta": "Volver al acceso de atleta",
+  "Se l’indirizzo è registrato per questo evento, riceverai un collegamento valido per 30 minuti. Controlla anche lo spam.": "Si la dirección está inscrita en este evento, recibirás un enlace válido durante 30 minutos. Revisa también el correo no deseado.",
+  "Password aggiornata. Accedi alla tua scheda con la nuova password.": "Contraseña actualizada. Accede a tu ficha con la nueva contraseña.",
+  "Le password non coincidono.": "Las contraseñas no coinciden.",
+  "Email o password non corretti per la scheda atleta. Usa le credenziali create durante la preiscrizione oppure recupera la password.": "Correo o contraseña de atleta incorrectos. Usa las credenciales creadas al inscribirte o recupera la contraseña.",
+  "Collegamento scaduto o già utilizzato. Richiedi un nuovo recupero.": "Enlace caducado o ya utilizado. Solicita otro enlace.",
+  "Operazione non riuscita. Riprova più tardi.": "No se pudo completar la operación. Inténtalo más tarde.",
+  "Troppi tentativi. Riprova tra 15 minuti.": "Demasiados intentos. Inténtalo en 15 minutos."
+});
+
   const textSources = new WeakMap();
   const attributeSources = new WeakMap();
   let language = readInitialLanguage();

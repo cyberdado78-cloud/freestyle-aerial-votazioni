@@ -55,7 +55,7 @@ supabase.rpc=async(name,body)=>{authCalls.push(['rpc',name,body]);if(name==='sco
 const context={require:name=>name==='./db'?{databaseConfigured:true,getSupabase:()=>supabase}:require(name),__dirname:'/qa',Buffer,URL,Date,Set,AbortSignal,console:{log(){},error(){}},process:{env:{SCOREFLOW_APP_ORIGIN:'https://scoreflow.dynamiczen.it',SCOREFLOW_MANAGED_EMAIL_ENABLED:'true',RESEND_API_KEY:'re_MOCK_ONLY',SCOREFLOW_EMAIL_FROM:'ScoreFlow <sender@example.invalid>'}},fetch:async(url,options)=>{providerCalls.push({url,options});return{ok:true,status:200,json:async()=>({id:'provider-mock'})};}};
 vm.createContext(context);
 const source=fs.readFileSync(process.argv[2],'utf8').replace('const port = Number(process.env.PORT) || 3000;','const port = 0;');
-vm.runInContext(source+'\nthis.api={server,resolvePublicFile,deliverNotification};',context);
+vm.runInContext(source+'\nthis.api={server,resolvePublicFile,deliverNotification,passwordHash,athleteRecoveryToken,newAthleteSessionToken,athleteSession,hashSecret};',context);
 let origin;
 async function api(method,path,body,cookie='',headers={}) {
  const response=await fetch(origin+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});
@@ -64,6 +64,51 @@ async function api(method,path,body,cookie='',headers={}) {
 const cookie='sf_access=qa-access-token; sf_refresh=qa-refresh-token';
 const owner=()=>tables.get('scoreflow_organization_accounts')[0];
 const cases=[
+ ['athlete recovery is generic and sends only a tenant-bound expiring link',async()=>{
+   const a={id:'athlete-recovery-qa',tenant_key:'qa-owner',event_id:'event-qa',email:'athlete@example.invalid',password_hash:context.api.passwordHash('old-password'),profile_json:{firstName:'TEST',attachments:{photo:{name:'test.png'}}}};
+   tables.set('scoreflow_athlete_accounts',[a]);const before=providerCalls.length;
+   const known=await api('POST','/api/athlete/recover',{tenantKey:a.tenant_key,email:a.email,language:'en'});
+   const unknown=await api('POST','/api/athlete/recover',{tenantKey:a.tenant_key,email:'unknown@example.invalid'});
+   assert.equal(known.status,202);assert.deepEqual(known.body,unknown.body);
+   await new Promise(r=>setImmediate(r));assert.equal(providerCalls.length,before+1);
+   const email=JSON.parse(providerCalls.at(-1).options.body);assert.equal(email.to[0],a.email);assert.match(email.subject,/athlete/);assert.match(email.text,/register=qa-owner#athlete-recovery=/);assert.ok(!JSON.stringify(known).includes('token'));
+ }],
+ ['athlete reset rejects tampered, expired and cross-tenant links without changing credentials',async()=>{
+   const a=tables.get('scoreflow_athlete_accounts')[0],old=a.password_hash,t=context.api.athleteRecoveryToken(a);
+   for(const [token,tenantKey] of [[t.slice(0,-1)+(t.endsWith('0')?'1':'0'),a.tenant_key],[context.api.athleteRecoveryToken(a,Date.now()-31*60000),a.tenant_key],[t,'another-tenant']]) {
+     assert.equal((await api('POST','/api/athlete/reset',{token,tenantKey,password:'new-password'})).status,400);
+   }
+   assert.equal(a.password_hash,old);
+   assert.equal((await api('POST','/api/athlete/reset',{token:t,tenantKey:a.tenant_key,password:'short'})).status,400);
+   assert.equal((await api('POST','/api/athlete/reset',{token:t,tenantKey:a.tenant_key,password:'x'.repeat(129)})).status,400);
+ }],
+ ['athlete recovery rejects cross-site requests and throttles repeated requests',async()=>{
+   const body={tenantKey:'qa-owner',email:'rate-athlete@example.invalid'};
+   assert.equal((await api('POST','/api/athlete/recover',body,'',{Origin:'https://attacker.invalid'})).status,403);
+   for(let i=0;i<6;i++) assert.equal((await api('POST','/api/athlete/recover',body)).status,202);
+   assert.equal((await api('POST','/api/athlete/recover',body)).status,429);
+ }],
+ ['athlete reset is single-use, preserves profile and invalidates old sessions and password',async()=>{
+   const a=tables.get('scoreflow_athlete_accounts')[0],profile=clone(a.profile_json),token=context.api.athleteRecoveryToken(a);
+   const login=await api('POST','/api/athlete/access',{tenantKey:a.tenant_key,email:a.email,password:'old-password'});assert.equal(login.status,200);assert.match(login.body.token,/^v2\./);
+   const oldSession=clone(tables.get('scoreflow_athlete_sessions')[0]);
+   tables.get('scoreflow_athlete_sessions').push({...oldSession,id:'legacy-session',token_hash:context.api.hashSecret('legacy'.repeat(12))});
+   const reset=await api('POST','/api/athlete/reset',{tenantKey:a.tenant_key,token,password:'replacement-password'});assert.equal(reset.status,200);
+   assert.deepEqual(a.profile_json,profile);assert.equal(tables.get('scoreflow_athlete_sessions').length,0);
+   assert.equal((await api('POST','/api/athlete/reset',{tenantKey:a.tenant_key,token,password:'replacement-password'})).status,400);
+   assert.equal((await api('POST','/api/athlete/access',{tenantKey:a.tenant_key,email:a.email,password:'old-password'})).status,401);
+   // A delayed insert from a concurrent old-password login must also fail.
+   tables.get('scoreflow_athlete_sessions').push(oldSession);
+   assert.equal(await context.api.athleteSession({headers:{authorization:'Bearer '+login.body.token}},supabase),null);
+   const newLogin=await api('POST','/api/athlete/access',{tenantKey:a.tenant_key,email:a.email,password:'replacement-password'});assert.equal(newLogin.status,200);
+   assert.ok(await context.api.athleteSession({headers:{authorization:'Bearer '+newLogin.body.token}},supabase));
+ }],
+ ['concurrent athlete resets consume the link only once',async()=>{
+   const a=tables.get('scoreflow_athlete_accounts')[0],token=context.api.athleteRecoveryToken(a);
+   const results=await Promise.all([1,2].map(i=>api('POST','/api/athlete/reset',{tenantKey:a.tenant_key,token,password:'parallel-password-'+i})));
+   assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
+ }],
+
  ['signup accepts an eight-character password and rejects seven characters',async()=>{const before=providerCalls.length;assert.equal((await api('POST','/api/account/signup',{email:'eight@example.invalid',password:'qa-pass8'})).status,200);assert.equal((await api('POST','/api/account/signup',{email:'seven@example.invalid',password:'1234567'})).status,400);assert.equal(providerCalls.length,before+1);providerCalls.length=0;authCalls.length=0;}],
  ['reset accepts eight characters and rejects seven before consuming a recovery token',async()=>{const before=authCalls.length;assert.equal((await api('POST','/api/account/reset',{token:'a'.repeat(64),password:'1234567'})).status,400);assert.equal(authCalls.length,before);assert.equal((await api('POST','/api/account/reset',{token:'a'.repeat(64),password:'qa-pass8'})).status,200);authCalls.length=0;}],
 

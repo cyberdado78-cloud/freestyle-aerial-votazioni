@@ -1344,6 +1344,42 @@
     }
   }
 
+  function athleteAccessCopy() {
+    const keys = ['forgot','recover','reset','email','password','confirm','send','save','back','sent','done','mismatch','loginError','resetError','serviceError','busy'];
+    const values = {
+      it: ['Password dimenticata?', 'Recupera accesso atleta', 'Nuova password atleta', 'Email della scheda atleta', 'Nuova password (8–128 caratteri)', 'Conferma nuova password', 'Invia collegamento', 'Salva nuova password', 'Torna all’accesso atleta', 'Se l’indirizzo è registrato per questo evento, riceverai un collegamento valido per 30 minuti. Controlla anche lo spam.', 'Password aggiornata. Accedi alla tua scheda con la nuova password.', 'Le password non coincidono.', 'Email o password non corretti per la scheda atleta. Usa le credenziali create durante la preiscrizione oppure recupera la password.', 'Collegamento scaduto o già utilizzato. Richiedi un nuovo recupero.', 'Operazione non riuscita. Riprova più tardi.', 'Troppi tentativi. Riprova tra 15 minuti.'],
+      en: ['Forgot password?', 'Recover athlete access', 'New athlete password', 'Athlete account email', 'New password (8–128 characters)', 'Confirm new password', 'Send link', 'Save new password', 'Back to athlete sign-in', 'If this address is registered for this event, you will receive a link valid for 30 minutes. Check your spam folder too.', 'Password updated. Sign in to your profile with your new password.', 'Passwords do not match.', 'Incorrect athlete email or password. Use the credentials created during registration or reset your password.', 'Link expired or already used. Request a new recovery link.', 'Unable to complete the request. Please try again later.', 'Too many attempts. Try again in 15 minutes.'],
+      fr: ['Mot de passe oublié ?', 'Récupérer l’accès athlète', 'Nouveau mot de passe athlète', 'E-mail du compte athlète', 'Nouveau mot de passe (8–128 caractères)', 'Confirmer le nouveau mot de passe', 'Envoyer le lien', 'Enregistrer le mot de passe', 'Retour à la connexion athlète', 'Si cette adresse est inscrite à cet événement, vous recevrez un lien valable 30 minutes. Vérifiez aussi les courriers indésirables.', 'Mot de passe mis à jour. Connectez-vous avec votre nouveau mot de passe.', 'Les mots de passe ne correspondent pas.', 'E-mail ou mot de passe athlète incorrect. Utilisez les identifiants créés à l’inscription ou récupérez le mot de passe.', 'Lien expiré ou déjà utilisé. Demandez un nouveau lien.', 'Opération impossible. Réessayez plus tard.', 'Trop de tentatives. Réessayez dans 15 minutes.'],
+      es: ['¿Olvidaste tu contraseña?', 'Recuperar acceso de atleta', 'Nueva contraseña de atleta', 'Correo de la cuenta de atleta', 'Nueva contraseña (8–128 caracteres)', 'Confirma la nueva contraseña', 'Enviar enlace', 'Guardar contraseña', 'Volver al acceso de atleta', 'Si la dirección está inscrita en este evento, recibirás un enlace válido durante 30 minutos. Revisa también el correo no deseado.', 'Contraseña actualizada. Accede a tu ficha con la nueva contraseña.', 'Las contraseñas no coinciden.', 'Correo o contraseña de atleta incorrectos. Usa las credenciales creadas al inscribirte o recupera la contraseña.', 'Enlace caducado o ya utilizado. Solicita otro enlace.', 'No se pudo completar la operación. Inténtalo más tarde.', 'Demasiados intentos. Inténtalo en 15 minutos.']
+    };
+    return Object.fromEntries(keys.map((key, i) => [key, (values[uiLanguage()] || values.it)[i]]));
+  }
+
+  function renderAthleteRecovery(config, token = '') {
+    const copy = athleteAccessCopy(), resetting = Boolean(token), content = $('#registrationContent');
+    $('#registrationLogout').classList.add('hidden');
+    content.innerHTML = `<article class="registration-card"><h2>${escapeHtml(resetting ? copy.reset : copy.recover)}</h2><form id="athleteRecoveryForm" class="operational-form">${resetting ?
+      `<label>${escapeHtml(copy.password)}<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><label>${escapeHtml(copy.confirm)}<input name="confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>` :
+      `<label>${escapeHtml(copy.email)}<input name="email" type="email" autocomplete="email" maxlength="254" required></label>`}
+      <p id="athleteRecoveryMessage" role="status" aria-live="polite"></p><button type="submit" class="button primary">${escapeHtml(resetting ? copy.save : copy.send)}</button></form><button id="athleteRecoveryBack" type="button" class="button ghost">${escapeHtml(copy.back)}</button>${resetting ? `<button id="athleteRecoveryAgain" type="button" class="button ghost">${escapeHtml(copy.forgot)}</button>` : ''}</article>`;
+    $('#athleteRecoveryBack').onclick = () => renderAthletePortal(config);
+    if (resetting) $('#athleteRecoveryAgain').onclick = () => renderAthleteRecovery(config);
+    $('#athleteRecoveryForm').onsubmit = async event => {
+      event.preventDefault();
+      const form = event.currentTarget, data = new FormData(form), status = $('#athleteRecoveryMessage'), button = $('button[type="submit"]', form);
+      if (resetting && data.get('password') !== data.get('confirmation')) { status.textContent = copy.mismatch; return; }
+      button.disabled = true; status.textContent = '';
+      try {
+        await athleteApi(`/api/athlete/${resetting ? 'reset' : 'recover'}`, {method: 'POST', body: JSON.stringify({tenantKey: config.tenantKey, language: uiLanguage(), ...(resetting ? {token, password: data.get('password')} : {email: data.get('email')})})}, config.tenantKey);
+        if (resetting) {
+          localStorage.removeItem(registrationSessionKey(config.tenantKey));
+          token = ''; form.reset(); await renderAthletePortal(config);
+          $('#athleteLoginMessage').textContent = copy.done;
+        } else { status.textContent = copy.sent; }
+      } catch (error) { status.textContent = /429/.test(error.message) ? copy.busy : resetting && /400/.test(error.message) ? copy.resetError : copy.serviceError; button.disabled = false; }
+    };
+  }
+
   async function renderAthletePortal(config, account = null, message = "", selectedAthleteId = "", addingAthlete = false) {
     const content = $("#registrationContent");
     const open = ["pre-registration", "registration"].includes(config.phase);
@@ -1378,11 +1414,15 @@
       return;
     }
     $("#registrationLogout").classList.add("hidden");
-    content.innerHTML = `<div class="registration-entry-grid"><article class="registration-card"><p class="eyebrow">Hai già le credenziali?</p><h2>Accedi alla scheda</h2><form id="athleteLoginForm" class="operational-form"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button primary" type="submit">Accedi</button></form></article><article class="registration-card register-intro"><p class="eyebrow">Nuova preiscrizione</p><h2>${profileOpen ? "Crea la tua scheda" : "Preiscrizioni chiuse"}</h2><p>${escapeHtml(config.registration?.instructions || "")}</p>${profileOpen ? '<button class="button primary show-signup" type="button">Inizia la compilazione</button>' : open ? '<span class="state-badge delayed">Gli account esistenti possono completare i documenti</span>' : '<span class="state-badge delayed">Portale chiuso</span>'}</article></div><article id="signupCard" class="registration-card hidden"><div class="registration-card-head"><div><p class="eyebrow">Scegli il tipo di account</p><h2>Preiscrizione</h2></div><button class="button ghost hide-signup" type="button">Chiudi</button></div><div class="registration-type-choice"><button type="button" class="active" data-account-type="individual"><strong>Atleta singolo</strong><small>Una sola scheda personale</small></button><button type="button" data-account-type="group"><strong>Scuola / coach</strong><small>Gestisci più atleti con un accesso</small></button></div><label id="plannedAthletesWrap" class="planned-athletes hidden">Numero indicativo di atleti<select id="plannedAthletes"><option value="5">5 atleti</option><option value="10">10 atleti</option><option value="20">20 atleti</option><option value="custom">Da definire</option></select></label><form id="athleteSignupForm" class="athlete-registration-form" data-account-type="individual">${athleteProfileFields(config, {}, true)}<div class="wide portal-actions"><button class="button primary" type="submit">Crea credenziali e salva scheda</button></div></form></article>`;
+    content.innerHTML = `<div class="registration-entry-grid"><article class="registration-card"><p class="eyebrow">Hai già le credenziali?</p><h2>Accedi alla scheda</h2><form id="athleteLoginForm" class="operational-form"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button primary" type="submit">Accedi</button><p id="athleteLoginMessage" role="status" aria-live="polite"></p></form><button id="athleteForgotPassword" class="button ghost" type="button">${escapeHtml(athleteAccessCopy().forgot)}</button></article><article class="registration-card register-intro"><p class="eyebrow">Nuova preiscrizione</p><h2>${profileOpen ? "Crea la tua scheda" : "Preiscrizioni chiuse"}</h2><p>${escapeHtml(config.registration?.instructions || "")}</p>${profileOpen ? '<button class="button primary show-signup" type="button">Inizia la compilazione</button>' : open ? '<span class="state-badge delayed">Gli account esistenti possono completare i documenti</span>' : '<span class="state-badge delayed">Portale chiuso</span>'}</article></div><article id="signupCard" class="registration-card hidden"><div class="registration-card-head"><div><p class="eyebrow">Scegli il tipo di account</p><h2>Preiscrizione</h2></div><button class="button ghost hide-signup" type="button">Chiudi</button></div><div class="registration-type-choice"><button type="button" class="active" data-account-type="individual"><strong>Atleta singolo</strong><small>Una sola scheda personale</small></button><button type="button" data-account-type="group"><strong>Scuola / coach</strong><small>Gestisci più atleti con un accesso</small></button></div><label id="plannedAthletesWrap" class="planned-athletes hidden">Numero indicativo di atleti<select id="plannedAthletes"><option value="5">5 atleti</option><option value="10">10 atleti</option><option value="20">20 atleti</option><option value="custom">Da definire</option></select></label><form id="athleteSignupForm" class="athlete-registration-form" data-account-type="individual">${athleteProfileFields(config, {}, true)}<div class="wide portal-actions"><button class="button primary" type="submit">Crea credenziali e salva scheda</button></div></form></article>`;
+    $("#athleteForgotPassword").onclick = () => renderAthleteRecovery(config);
     $("#athleteLoginForm").addEventListener("submit", async event => {
       event.preventDefault(); const data = new FormData(event.currentTarget);
       try { const result = await athleteApi("/api/athlete/access", { method: "POST", body: JSON.stringify({ tenantKey: config.tenantKey, email: data.get("email"), password: data.get("password") }) }, config.tenantKey); localStorage.setItem(registrationSessionKey(config.tenantKey), JSON.stringify({ token: result.token, expiresAt: result.expiresAt })); renderAthletePortal(config, result.account); }
-      catch (error) { showToast(error.message); }
+      catch (error) {
+        const copy = athleteAccessCopy();
+        $('#athleteLoginMessage').textContent = /401/.test(error.message) ? copy.loginError : /429/.test(error.message) ? copy.busy : copy.serviceError;
+      }
     });
     const showSignup = $(".show-signup");
     if (showSignup) showSignup.addEventListener("click", () => { $("#signupCard").classList.remove("hidden"); $("#signupCard").scrollIntoView({ behavior: "smooth" }); });
@@ -1405,7 +1445,7 @@
     });
   }
 
-  async function showRegistrationPortal(tenantKey) {
+  async function showRegistrationPortal(tenantKey, recoveryToken = '') {
     const config = await athleteApi(`/api/registration/config?tenant=${encodeURIComponent(tenantKey)}`, {}, tenantKey);
     const selectedLanguage = localStorage.getItem("scoreflow.uiLanguage") || config.language || "it";
     window.ScoreFlowI18n?.setLanguage(selectedLanguage);
@@ -1417,7 +1457,8 @@
     updateRegistrationCountdown(config); registrationCountdownTimer = setInterval(() => updateRegistrationCountdown(config), 1000);
     let account = null;
     try { if (localStorage.getItem(registrationSessionKey(tenantKey))) account = (await athleteApi("/api/athlete/profile", {}, tenantKey)).account; } catch { localStorage.removeItem(registrationSessionKey(tenantKey)); }
-    await renderAthletePortal(config, account);
+    if (recoveryToken) renderAthleteRecovery(config, recoveryToken);
+    else await renderAthletePortal(config, account);
     $("#registrationLogout").onclick = () => { localStorage.removeItem(registrationSessionKey(tenantKey)); renderAthletePortal(config, null); };
   }
 
@@ -2903,7 +2944,9 @@
       const registrationTenant = String(new URLSearchParams(window.location.search).get("register") || "").trim().toLowerCase();
       if (registrationTenant) {
         $("#organizerControls").classList.add("hidden");
-        await showRegistrationPortal(registrationTenant);
+        const recoveryToken = accountLink.get('athlete-recovery') || '';
+        if (accountLink.has('athlete-recovery')) history.replaceState({}, '', window.location.pathname + window.location.search);
+        await showRegistrationPortal(registrationTenant, recoveryToken);
         return;
       }
       const sharedOrganization = await joinSharedDevice();

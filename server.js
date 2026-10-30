@@ -68,6 +68,45 @@ function passwordMatches(password, encoded) {
   return actual.length === expected.length && crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 }
 
+// Password-bound MACs invalidate recovery links and new sessions after a reset.
+// The password digest is server-only; domain separation prevents token confusion.
+function athleteMac(account, purpose, payload) {
+  return crypto.createHmac('sha256', account.password_hash)
+    .update(JSON.stringify([purpose, account.tenant_key, account.id, payload])).digest('hex');
+}
+function equalMac(actual, expected) {
+  return /^[a-f0-9]{64}$/.test(actual || '') && crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+}
+function newAthleteSessionToken(account) {
+  const nonce = crypto.randomBytes(32).toString('hex');
+  return `v2.${nonce}.${athleteMac(account, 'session', nonce)}`;
+}
+function athleteRecoveryToken(account, now = Date.now()) {
+  const payload = Buffer.from(JSON.stringify({ id: account.id, tenant: account.tenant_key, expires: now + 30 * 60000, nonce: crypto.randomBytes(32).toString('hex') })).toString('base64url');
+  return `${payload}.${athleteMac(account, 'recovery', payload)}`;
+}
+function readAthleteRecoveryToken(token) {
+  if (typeof token !== 'string' || token.length > 2048 || !/^[A-Za-z0-9_-]+\.[a-f0-9]{64}$/.test(token)) return null;
+  try {
+    const [payload, mac] = token.split('.'), claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (typeof claims.id !== 'string' || claims.id.length > 80 || !/^[a-z0-9-]{1,80}$/.test(claims.tenant) || !Number.isSafeInteger(claims.expires) || claims.expires <= Date.now() || claims.expires > Date.now() + 30 * 60000 || !/^[a-f0-9]{64}$/.test(claims.nonce)) return null;
+    return { ...claims, payload, mac };
+  } catch { return null; }
+}
+async function sendAthleteRecovery(account, language) {
+  const copy = {
+    it: ['ScoreFlow — recupero accesso atleta', 'Per impostare una nuova password della scheda atleta, apri il collegamento entro 30 minuti. Se non hai richiesto il recupero, ignora questa email.'],
+    en: ['ScoreFlow — athlete password recovery', 'Open the link within 30 minutes to set a new athlete password. If you did not request this, ignore this email.'],
+    fr: ['ScoreFlow — récupération du compte athlète', 'Ouvrez le lien dans les 30 minutes pour définir un nouveau mot de passe athlète. Si vous n’avez pas demandé cette opération, ignorez cet e-mail.'],
+    es: ['ScoreFlow — recuperación de cuenta de atleta', 'Abre el enlace en 30 minutos para establecer una nueva contraseña de atleta. Si no lo solicitaste, ignora este correo.']
+  }[normalizeLanguage(language)];
+  const link = `${new URL(appOrigin).origin}/?register=${encodeURIComponent(account.tenant_key)}#athlete-recovery=${encodeURIComponent(athleteRecoveryToken(account))}`;
+  const result = await deliverNotification(account.email, {id: crypto.randomUUID(), subject: copy[0], message: `${copy[1]}\n\n${link}`},
+    {organizationName: 'ScoreFlow', accountLink: link, recovery: true, language: normalizeLanguage(language)},
+    {apiKey: process.env.RESEND_API_KEY, from: process.env.SCOREFLOW_EMAIL_FROM, tenantKey: 'athlete-recovery'});
+  if (result.deliveryStatus !== 'sent') throw new Error('Athlete recovery email delivery failed');
+}
+
 function cleanProfile(value = {}) {
   const text = (key, maximum = 500) => String(value[key] || '').trim().slice(0, maximum);
   const attachments = value.attachments && typeof value.attachments === 'object' ? value.attachments : {};
@@ -423,7 +462,14 @@ async function athleteSession(request, supabase) {
     .select('id,account_id,tenant_key,event_id,expires_at')
     .eq('token_hash', hashSecret(token)).gt('expires_at', new Date().toISOString()).maybeSingle();
   if (error) throw databaseError(error);
-  return data ? { ...data, token } : null;
+  if (!data) return null;
+  if (token.startsWith('v2.')) {
+    const {data: account, error: accountError} = await supabase.from(registrationTable).select('id,tenant_key,password_hash').eq('id', data.account_id).eq('tenant_key', data.tenant_key).maybeSingle();
+    if (accountError) throw databaseError(accountError);
+    const [version, nonce, mac, extra] = token.split('.');
+    if (!account || extra || !/^[a-f0-9]{64}$/.test(nonce) || !equalMac(mac, athleteMac(account, 'session', nonce))) return null;
+  }
+  return { ...data, token };
 }
 
 async function readJsonBody(request, maximumBytes = 5 * 1024 * 1024) {
@@ -845,6 +891,49 @@ async function handleApi(request, response, requestUrl) {
     return true;
   }
 
+  if (['/api/athlete/recover', '/api/athlete/reset'].includes(requestUrl.pathname) && request.method === 'POST') {
+    safeAccountMutation(request);
+    if (!databaseConfigured) throw accountFailure('Servizio non disponibile.', 503);
+    const body = await readJsonBody(request, 8192);
+    const tenantKey = String(body.tenantKey || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,80}$/.test(tenantKey)) throw accountFailure('Organizzazione non valida.');
+    const supabase = getSupabase();
+    if (requestUrl.pathname === '/api/athlete/recover') {
+      const email = normalizeEmail(body.email);
+      rateLimitAccount(request, `${tenantKey}:${email}`, 'athlete-recover');
+      if (!validEmailAddress(email)) throw accountFailure('Inserisci un indirizzo email valido.');
+      if (!managedEmailReady()) throw accountFailure('Il servizio email non è disponibile. Riprova più tardi.', 503);
+      // Return before lookup/delivery so neither account existence nor provider latency is exposed.
+      sendJson(response, 202, {message: 'Se l’indirizzo è registrato per questo evento, riceverai un collegamento valido per 30 minuti.'});
+      void (async () => {
+        const {data: account, error} = await supabase.from(registrationTable).select('id,tenant_key,email,password_hash').eq('tenant_key', tenantKey).eq('email', email).maybeSingle();
+        if (error) throw databaseError(error);
+        if (account) await sendAthleteRecovery(account, body.language);
+      })().catch(() => console.error('Athlete recovery delivery failed; no credentials logged.'));
+      return true;
+    }
+    rateLimitAccount(request, '', 'athlete-reset');
+    const invalid = () => accountFailure('Collegamento scaduto o già utilizzato. Richiedi un nuovo recupero.', 400, 'invalid-recovery');
+    const claims = readAthleteRecoveryToken(body.token);
+    if (!claims || claims.tenant !== tenantKey) throw invalid();
+    const password = String(body.password || '');
+    if (password.length < 8 || password.length > 128) throw accountFailure('Scegli una password da 8 a 128 caratteri.');
+    const {data: account, error} = await supabase.from(registrationTable).select('id,tenant_key,password_hash').eq('id', claims.id).eq('tenant_key', tenantKey).maybeSingle();
+    if (error) throw databaseError(error);
+    if (!account || !equalMac(claims.mac, athleteMac(account, 'recovery', claims.payload))) throw invalid();
+    // Revoke legacy sessions before committing the password change. Sessions created
+    // concurrently by the new login flow are password-bound and fail after the CAS.
+    const {error: revokeError} = await supabase.from(registrationSessionTable).delete().eq('account_id', account.id).eq('tenant_key', tenantKey);
+    if (revokeError) throw databaseError(revokeError);
+    const {data: changed, error: updateError} = await supabase.from(registrationTable)
+      .update({password_hash: passwordHash(password), updated_at: new Date().toISOString()})
+      .eq('id', account.id).eq('tenant_key', tenantKey).eq('password_hash', account.password_hash).select('id').maybeSingle();
+    if (updateError) throw databaseError(updateError);
+    if (!changed) throw invalid();
+    sendJson(response, 200, {message: 'Password aggiornata. Accedi alla tua scheda.'});
+    return true;
+  }
+
   if (['/api/registration/signup', '/api/athlete/enroll'].includes(requestUrl.pathname) && request.method === 'POST') {
     if (!databaseConfigured) { sendJson(response, 503, { error: 'database-not-configured' }); return true; }
     const body = await readJsonBody(request, 512 * 1024);
@@ -865,15 +954,16 @@ async function handleApi(request, response, requestUrl) {
       sendJson(response, 400, { error: 'incomplete-profile', message: 'Completa tutti i campi obbligatori, inclusi scuola, coach e telefono coach.' }); return true;
     }
     const now = new Date().toISOString();
+    const encodedPassword = passwordHash(password);
     const { data: account, error } = await supabase.from(registrationTable).insert({
-      tenant_key: tenantKey, event_id: event.id, email, password_hash: passwordHash(password), profile_json: profile,
+      tenant_key: tenantKey, event_id: event.id, email, password_hash: encodedPassword, profile_json: profile,
       status: phase === 'pre-registration' ? 'pre-registered' : 'registered', created_at: now, updated_at: now
     }).select('id,status,created_at,updated_at').single();
     if (error) {
       if (error.code === '23505') { sendJson(response, 409, { error: 'email-exists', message: 'Esiste già una scheda con questa email. Accedi con le tue credenziali.' }); return true; }
       throw databaseError(error);
     }
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = newAthleteSessionToken({ ...account, tenant_key: tenantKey, password_hash: encodedPassword });
     const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
     const { error: sessionError } = await supabase.from(registrationSessionTable).insert({ account_id: account.id, tenant_key: tenantKey, event_id: event.id, token_hash: hashSecret(token), expires_at: expiresAt });
     if (sessionError) throw databaseError(sessionError);
@@ -886,11 +976,13 @@ async function handleApi(request, response, requestUrl) {
     const body = await readJsonBody(request, 64 * 1024);
     const tenantKey = String(body.tenantKey || '').trim().toLowerCase();
     const email = normalizeEmail(body.email);
+    safeAccountMutation(request);
+    rateLimitAccount(request, `${tenantKey}:${email}`, 'athlete-login');
     const supabase = getSupabase();
     const { data: account, error } = await supabase.from(registrationTable).select('id,event_id,email,password_hash,profile_json,status,created_at,updated_at').eq('tenant_key', tenantKey).eq('email', email).maybeSingle();
     if (error) throw databaseError(error);
     if (!account || !passwordMatches(body.password, account.password_hash)) { sendJson(response, 401, { error: 'invalid-login', message: 'Email o password non corretti.' }); return true; }
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = newAthleteSessionToken({ ...account, tenant_key: tenantKey });
     const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
     const { error: sessionError } = await supabase.from(registrationSessionTable).insert({ account_id: account.id, tenant_key: tenantKey, event_id: account.event_id, token_hash: hashSecret(token), expires_at: expiresAt });
     if (sessionError) throw databaseError(sessionError);

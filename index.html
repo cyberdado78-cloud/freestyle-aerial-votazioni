@@ -4,20 +4,62 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111827">
-  <title>ScoreFlow — Configurazione piattaforma</title>
-  <link rel="stylesheet" href="./styles.css">
+  <title>ScoreFlow — Il tuo evento, sotto controllo</title>
+  <link rel="stylesheet" href="./styles.css?v=3.3.0-rules2">
 </head>
 <body>
+  <a class="skip-link" href="#moduleContent">Vai al contenuto</a>
   <header class="topbar">
+    <button id="navToggle" class="nav-toggle" type="button" aria-label="Apri navigazione" aria-controls="dashboardNavigation" aria-expanded="false"></button>
     <a class="brand" href="#top" aria-label="ScoreFlow home">
       <span class="brand-mark">SF</span>
-      <span><strong>ScoreFlow</strong><small>Competition scoring platform</small></span>
+      <span><strong>ScoreFlow</strong><small>Eventi. Persone. Performance.</small></span>
     </a>
     <div class="top-actions">
-      <span class="pill">Versione 1.5 · Regia di gara</span>
+      <label class="language-picker"><span>Lingua</span><select data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label>
+      <span class="pill">Versione 3.3.0</span>
       <button class="button ghost" id="newConfigBtn" type="button">Nuova configurazione</button>
     </div>
   </header>
+
+  <section id="onboarding" class="onboarding hidden" aria-labelledby="onboardingTitle">
+    <div class="onboarding-card">
+      <div class="onboarding-head">
+        <div><p class="eyebrow">Benvenuto in ScoreFlow</p><h1 id="onboardingTitle">Il tuo prossimo grande evento
+inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, categorie, giudici e atleti. Potrai modificare tutto in seguito.</p></div>
+        <span class="onboarding-step">1ª configurazione</span>
+      </div>
+      <div class="onboarding-block">
+        <strong>1. Tipo di competizione</strong>
+        <div class="choice-grid" id="demoProfileChoices">
+          <button class="choice-card active" type="button" data-demo-profile="aerial"><span>◉</span><strong>Discipline aeree</strong><small>Tessuti, cerchio e performance</small></button>
+          <button class="choice-card" type="button" data-demo-profile="dance"><span>◆</span><strong>Danza e spettacolo</strong><small>Tecnica, musicalità e presenza</small></button>
+          <button class="choice-card" type="button" data-demo-profile="gymnastics"><span>▲</span><strong>Ginnastica</strong><small>Difficoltà, esecuzione e precisione</small></button>
+          <button class="choice-card" type="button" data-demo-profile="generic"><span>●</span><strong>Altra competizione</strong><small>Modello neutro personalizzabile</small></button>
+        </div>
+      </div>
+      <div class="onboarding-block">
+        <strong>2. Dimensione della prova</strong>
+        <div class="choice-grid compact" id="demoSizeChoices">
+          <button class="choice-card" type="button" data-demo-size="compact"><strong>Rapida</strong><small>3 giudici · 6 atleti</small></button>
+          <button class="choice-card active" type="button" data-demo-size="standard"><strong>Completa</strong><small>4 giudici · 12 atleti</small></button>
+          <button class="choice-card" type="button" data-demo-size="large"><strong>Grande</strong><small>6 giudici · 24 atleti</small></button>
+        </div>
+      </div>
+      <div class="onboarding-block">
+        <strong>3. Identità facoltativa</strong>
+        <div class="form-grid two onboarding-fields">
+          <label>Nome organizzazione<input id="quickOrgName" placeholder="Lascia vuoto per un nome dimostrativo"></label>
+          <label>Nome evento<input id="quickEventName" placeholder="Lascia vuoto per un evento dimostrativo"></label>
+        </div>
+        <p class="onboarding-note">Se non carichi un logo o non inserisci informazioni, verranno creati automaticamente valori coerenti con la scelta effettuata.</p>
+      </div>
+      <div class="onboarding-actions">
+        <button id="manualSetupBtn" class="button ghost" type="button">Configura con i miei dati</button>
+        <button id="createDemoBtn" class="button primary" type="button">Crea demo completa</button>
+      </div>
+    </div>
+  </section>
 
   <main id="top" class="layout">
     <aside class="sidebar card">
@@ -30,9 +72,9 @@
     <section class="content">
       <div class="hero card">
         <div>
-          <p class="eyebrow">Configuratore SaaS</p>
+          <p class="eyebrow">Configura il tuo evento</p>
           <h1>Crea il primo ambiente ScoreFlow</h1>
-          <p>Questa base sostituisce date, categorie e criteri fissi con una configurazione riutilizzabile per qualunque competizione.</p>
+          <p>Pochi passaggi per preparare iscrizioni, giudici e valutazioni. Le impostazioni restano modificabili anche dopo la configurazione.</p>
         </div>
         <div class="trial-preview" aria-live="polite">
           <span>Periodo di prova</span>
@@ -51,8 +93,8 @@
       <form id="configForm" novalidate>
         <section class="card panel active" data-step="1">
           <div class="section-heading">
-            <div><p class="eyebrow">Passaggio 1</p><h2>Identità del cliente</h2></div>
-            <span class="status-dot">Tenant separato</span>
+            <div><p class="eyebrow">Passaggio 1</p><h2>La tua organizzazione</h2></div>
+            <span class="status-dot">Ambiente riservato</span>
           </div>
           <div class="form-grid two">
             <label>Nome organizzazione<input id="orgName" required placeholder="Es. Freestyle Academy ASD"></label>
@@ -60,7 +102,7 @@
             <label>Lingua predefinita
               <select id="language"><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select>
             </label>
-            <label>Durata prova gratuita<input id="trialDays" type="number" min="1" max="90" value="14" required><small>Configurabile anche dal super amministratore.</small></label>
+            <label>Durata prova gratuita<input id="trialDays" type="number" min="14" max="14" value="14" readonly required><small>14 giorni fissi: 1 evento, 6 atleti, 3 giudici, 2 categorie e 10 invii email.</small></label>
             <label>Colore principale<input id="primaryColor" type="color" value="#c1121f"></label>
             <label>Colore secondario<input id="accentColor" type="color" value="#d4af37"></label>
             <div class="wide brand-preview"><div class="brand-preview-mark">SF</div><div><span>Anteprima identità</span><strong>ScoreFlow Competition</strong><small>I colori scelti verranno applicati a tutta l’interfaccia.</small></div><div class="brand-preview-swatches"><i></i><i></i></div></div>
@@ -104,6 +146,7 @@
             <label class="toggle"><input id="penaltiesEnabled" type="checkbox" checked><span></span>Penalità abilitate</label>
             <label class="toggle"><input id="penaltyNoteRequired" type="checkbox" checked><span></span>Motivazione penalità obbligatoria</label>
             <label class="toggle"><input id="publicVoting" type="checkbox"><span></span>Voto del pubblico</label>
+            <label class="toggle"><input id="publicQr" type="checkbox"><span></span>QR pubblico opzionale</label>
             <label class="toggle"><input id="judgeSubstitutionLog" type="checkbox" checked><span></span>Registro sostituzioni giudici</label>
           </div>
           <div class="table-wrap">
@@ -136,25 +179,44 @@
   </main>
 
   <section id="dashboard" class="dashboard hidden">
-    <aside class="dashboard-nav">
+    <button id="navBackdrop" class="nav-backdrop" type="button" aria-label="Chiudi navigazione"></button>
+    <aside class="dashboard-nav" id="dashboardNavigation">
       <div class="dashboard-brand"><span class="brand-mark">SF</span><div><strong id="dashboardOrg">ScoreFlow</strong><small id="dashboardPlan">Prova gratuita</small></div></div>
-      <nav>
+      <nav aria-label="Navigazione evento">
+        <span class="nav-section-label">Organizza</span>
         <button class="dash-link active" data-module="overview">Panoramica</button>
         <button class="dash-link" data-module="event">Evento</button>
         <button class="dash-link" data-module="stations">Postazioni</button>
         <button class="dash-link" data-module="participants">Partecipanti</button>
+        <button class="dash-link" data-module="registrations">Iscrizioni</button>
         <button class="dash-link" data-module="judges">Giudici</button>
+        <span class="nav-section-label">Durante l’evento</span>
         <button class="dash-link" data-module="control">Regia</button>
         <button class="dash-link" data-module="eliminations">Eliminatorie</button>
         <button class="dash-link" data-module="results">Risultati</button>
         <button class="dash-link" data-module="public">Voto pubblico</button>
       </nav>
+      <div class="nav-footer"><span id="cloudStatus" class="connection-status connecting" role="status">Connessione al cloud…</span><small>Il tuo lavoro, sempre con te.</small></div>
       <button id="backToConfigBtn" class="button ghost" type="button">Modifica configurazione</button>
     </aside>
     <div class="dashboard-main">
       <header class="dashboard-header"><div><p class="eyebrow">Ambiente cliente</p><h1 id="dashboardEvent">Evento</h1></div><span id="dashboardTrial" class="trial-chip"></span></header>
-      <div id="moduleContent"></div>
+      <div id="moduleContent" tabindex="-1"></div>
     </div>
+  </section>
+
+  <section id="registrationPortal" class="registration-portal hidden">
+    <header class="registration-topbar">
+      <div class="brand"><span class="brand-mark">SF</span><span><strong id="registrationOrg">ScoreFlow</strong><small>Portale iscrizioni atleti</small></span></div>
+      <div class="registration-actions"><label class="language-picker"><span>Lingua</span><select data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label><button id="registrationLogout" class="button ghost hidden" type="button">Esci</button></div>
+    </header>
+    <main class="registration-main">
+      <section class="registration-hero">
+        <div><p class="eyebrow">Preiscrizioni e iscrizioni</p><h1 id="registrationEvent">Evento</h1><p id="registrationDates"></p></div>
+        <div class="countdown-card"><span id="countdownLabel">Tempo rimasto</span><strong id="registrationCountdown">--:--:--</strong><small id="registrationPhase"></small></div>
+      </section>
+      <div id="registrationContent"></div>
+    </main>
   </section>
 
   <template id="criterionTemplate">
@@ -178,6 +240,9 @@
     </div>
   </template>
 
-  <script src="./app.js" defer></script>
+  <script src="./scripts/i18n.js?v=3.3.0-rules2" defer></script>
+  <script src="./scripts/competition-rules.js?v=3.3.0-rules3" defer></script>
+  <script src="./scripts/regulation-import.js?v=3.3.0-rules2" defer></script>
+  <script src="./app.js?v=3.3.0-rules2" defer></script>
 </body>
 </html>

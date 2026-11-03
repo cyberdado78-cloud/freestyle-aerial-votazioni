@@ -1,0 +1,40 @@
+name: Isolated TEST restore
+on:
+  push:
+    branches: [test/isolated-restore-20261103]
+    paths: [restore-test/**, .github/workflows/isolated-restore.yml]
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Fetch only test sources
+        env:
+          REF: ${{ github.sha }}
+        run: |
+          mkdir -p restore-test
+          for file in test.py schema.json; do
+            curl --fail --retry 3 -L "https://raw.githubusercontent.com/cyberdado78-cloud/freestyle-aerial-votazioni/$REF/restore-test/$file" -o "restore-test/$file"
+          done
+      - name: Install pinned official CLI
+        run: |
+          curl --fail --retry 3 -L https://github.com/supabase/cli/releases/download/v3.0.0/supabase_linux_amd64.tar.gz -o /tmp/supabase.tar.gz
+          tar -xzf /tmp/supabase.tar.gz -C /tmp supabase
+          sudo install /tmp/supabase /usr/local/bin/supabase
+          supabase --version
+          supabase init --help
+          supabase start --help
+          supabase stop --help
+          supabase status --help
+      - name: Start isolated Supabase
+        run: |
+          supabase init
+          sed -i 's/^project_id = .*/project_id = "scoreflow-restore-test"/' supabase/config.toml
+          supabase start
+      - name: Restore and verify TEST data
+        run: python3 restore-test/test.py
+      - name: Destroy temporary environment
+        if: always()
+        run: supabase stop --no-backup

@@ -19,21 +19,14 @@ def api(path, method='GET', body=None, key=None, token=None, raw=False):
         data=r.read()
         return data if raw else (json.loads(data) if data else None)
 def apply_schema():
-    schema=json.loads((ROOT/'schema.json').read_text())
-    sql('\n'.join(schema['tables']))
-    for foreign in [False,True]:
-        for c in schema['constraints']:
-            if (c['type']=='f')==foreign:
-                sql(f'ALTER TABLE public.{c["table"]} ADD CONSTRAINT "{c["name"]}" {c["definition"]};')
-    sql('\n'.join(schema['functions']))
-    for table in [s.split('public.')[1].split(' ')[0] for s in schema['tables']]:
+    # Independently authored synthetic fixture DDL only.
+    # This file does not load production schemas, functions or policies.
+    fixture=json.loads((ROOT/'schema.json').read_text())
+    assert fixture['notice'].startswith('Synthetic TEST fixture schema')
+    for statement in fixture['tables']:
+        sql(statement)
+    for table in ['scoreflow_tenants','scoreflow_organization_accounts','scoreflow_athlete_accounts','scoreflow_athlete_sessions','scoreflow_access_tokens','scoreflow_email_settings','scoreflow_license_codes','scoreflow_trial_email_claims']:
         sql(f'ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY;')
-    for p in schema['policies']:
-        roles=','.join('"'+r+'"' for r in p['roles'])
-        q=f'CREATE POLICY "{p["policyname"]}" ON {p["schemaname"]}.{p["tablename"]} AS {p["permissive"]} FOR {p["cmd"]} TO {roles}'
-        if p['qual']: q+=' USING ('+p['qual']+')'
-        if p['with_check']: q+=' WITH CHECK ('+p['with_check']+')'
-        sql(q+';')
 
 status()
 assert env['API_URL'].startswith(('http://127.0.0.1:','http://localhost:')), 'Local instance required'
@@ -47,7 +40,7 @@ api('/storage/v1/bucket','POST',{'id':'scoreflow-files','name':'scoreflow-files'
 files={'TEST-photo.txt':b'TEST photo placeholder','TEST-video.txt':b'TEST video placeholder','TEST-document.txt':b'TEST non-medical document','TEST-audio.txt':b'TEST audio placeholder'}
 for name,data in files.items(): api('/storage/v1/object/scoreflow-files/test-restore/'+name,'POST',data,raw=True)
 snapshot=sql("SELECT jsonb_object_agg(tablename,records)::text FROM ("+' UNION ALL '.join("SELECT '"+t+"' AS tablename, coalesce(jsonb_agg(to_jsonb(x)), '[]') AS records FROM public."+t+" x" for t in ['scoreflow_tenants','scoreflow_organization_accounts','scoreflow_athlete_accounts','scoreflow_athlete_sessions','scoreflow_access_tokens','scoreflow_email_settings','scoreflow_license_codes','scoreflow_trial_email_claims'])+") s;")
-dump=run('docker','exec','supabase_db_scoreflow-restore-test','pg_dump','-U','postgres','-d','postgres','--data-only','--no-owner','--no-privileges','--schema=public','--table=auth.users','--table=auth.identities')
+dump=run('docker','exec','supabase_db_scoreflow-restore-test','pg_dump','-U','postgres','-d','postgres','--data-only','--no-owner','--no-privileges','--table=public.scoreflow_*','--table=auth.users','--table=auth.identities')
 (ROOT/'TEST-only.sql').write_text(dump)
 print('PASS: isolated synthetic account, 8 application tables, jury/public votes and 4 files created',flush=True)
 run('supabase','stop','--no-backup')

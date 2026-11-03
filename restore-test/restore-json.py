@@ -37,7 +37,11 @@ def restore(backup, archive, manifest, env, sql):
         text=json.dumps(backup['tables'][table],separators=(',',':'))
         # Hex encoding avoids SQL quoting/injection from JSON values.
         encoded=text.encode().hex()
-        statements.append(f"INSERT INTO {table} SELECT * FROM jsonb_populate_recordset(NULL::{table},convert_from(decode('{encoded}','hex'),'UTF8')::jsonb);")
+        # Auth contains generated columns (for example confirmed_at): restore
+        # source fields and let PostgreSQL regenerate computed values.
+        columns=json.loads(sql(f"SELECT jsonb_agg(attname ORDER BY attnum)::text FROM pg_attribute WHERE attrelid='{table}'::regclass AND attnum>0 AND NOT attisdropped AND attgenerated='';"))
+        selected=','.join('"'+column.replace('"','""')+'"' for column in columns)
+        statements.append(f"INSERT INTO {table} ({selected}) OVERRIDING SYSTEM VALUE SELECT {selected} FROM jsonb_populate_recordset(NULL::{table},convert_from(decode('{encoded}','hex'),'UTF8')::jsonb);")
     statements.append("SELECT setval(pg_get_serial_sequence('auth.refresh_tokens','id'),coalesce((SELECT max(id) FROM auth.refresh_tokens),0)+1,false);")
     statements.append('COMMIT;')
     sql('\n'.join(statements))

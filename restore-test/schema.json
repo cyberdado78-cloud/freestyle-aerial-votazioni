@@ -1,0 +1,16 @@
+{
+  "notice": "Synthetic TEST fixture schema, independently authored for restore mechanics. NOT production DDL, policies or functions. Actual production schema is tested privately by local PGlite drill.",
+  "tables": [
+    "CREATE TABLE public.scoreflow_tenants (tenant_key text PRIMARY KEY, display_name text, secret_hash text, state_json jsonb);",
+    "CREATE TABLE public.scoreflow_organization_accounts (tenant_key text PRIMARY KEY REFERENCES public.scoreflow_tenants, owner_id uuid REFERENCES auth.users);",
+    "CREATE TABLE public.scoreflow_athlete_accounts (id uuid PRIMARY KEY,tenant_key text REFERENCES public.scoreflow_tenants,event_id text,email text,password_hash text);",
+    "CREATE TABLE public.scoreflow_athlete_sessions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),account_id uuid REFERENCES public.scoreflow_athlete_accounts,tenant_key text,event_id text,token_hash text,expires_at timestamptz);",
+    "CREATE TABLE public.scoreflow_access_tokens (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_key text,event_id text,role text,label text,token_hash text);",
+    "CREATE TABLE public.scoreflow_email_settings (tenant_key text PRIMARY KEY);",
+    "CREATE TABLE public.scoreflow_license_codes (code_hash text PRIMARY KEY,tenant_key text,active boolean);",
+    "CREATE TABLE public.scoreflow_trial_email_claims (tenant_key text,notification_id text,PRIMARY KEY(tenant_key,notification_id));"
+  ],
+  "constraints": [],
+  "functions": [],
+  "policies": []
+}

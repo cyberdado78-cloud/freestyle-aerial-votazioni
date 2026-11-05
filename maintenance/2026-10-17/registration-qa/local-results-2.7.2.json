@@ -1,0 +1,157 @@
+{
+  "origin": "http://127.0.0.1:36001",
+  "tenantKey": "qa-registration-20261017112911-207a4d",
+  "checkedAt": "2026-10-17T11:29:11.692832Z",
+  "results": [
+    {
+      "test": "Create separate QA organization",
+      "passed": true
+    },
+    {
+      "test": "Public pre-registration window opens",
+      "passed": true
+    },
+    {
+      "test": "Incomplete application rejected",
+      "passed": true
+    },
+    {
+      "test": "Individual enrollment creates authenticated session",
+      "passed": true
+    },
+    {
+      "test": "Duplicate email rejected",
+      "passed": true
+    },
+    {
+      "test": "Incorrect password rejected",
+      "passed": true
+    },
+    {
+      "test": "Existing athlete can sign in again",
+      "passed": true
+    },
+    {
+      "test": "Authenticated profile read",
+      "passed": true
+    },
+    {
+      "test": "Profile protected without session",
+      "passed": true
+    },
+    {
+      "test": "Incomplete application cannot enter roster",
+      "passed": true
+    },
+    {
+      "test": "Application remains outside competition roster",
+      "passed": true
+    },
+    {
+      "test": "Wrong attachment MIME rejected",
+      "passed": true
+    },
+    {
+      "test": "Upload photo and associate with athlete",
+      "passed": true
+    },
+    {
+      "test": "Upload medicalCertificate and associate with athlete",
+      "passed": true
+    },
+    {
+      "test": "Upload music and associate with athlete",
+      "passed": true
+    },
+    {
+      "test": "Upload entryVideo and associate with athlete",
+      "passed": true
+    },
+    {
+      "test": "Protected music download link issued",
+      "passed": true
+    },
+    {
+      "test": "Music duration retained in athlete profile",
+      "passed": true
+    },
+    {
+      "test": "Regia approve-video",
+      "passed": true
+    },
+    {
+      "test": "Communication approve-video honestly remains pending",
+      "passed": true
+    },
+    {
+      "test": "Regia mark-paid",
+      "passed": true
+    },
+    {
+      "test": "Communication mark-paid honestly remains pending",
+      "passed": true
+    },
+    {
+      "test": "Regia approve-roster",
+      "passed": true
+    },
+    {
+      "test": "Communication approve-roster honestly remains pending",
+      "passed": true
+    },
+    {
+      "test": "School/coach account created",
+      "passed": true
+    },
+    {
+      "test": "Group adds second athlete with separate school/coach",
+      "passed": true
+    },
+    {
+      "test": "Other account cannot access individual athlete attachment",
+      "passed": true
+    },
+    {
+      "test": "Signup ignores athlete-supplied approvals and document references",
+      "passed": true
+    },
+    {
+      "test": "Forged signup remains incomplete for regia",
+      "passed": true
+    },
+    {
+      "test": "Group additions ignore athlete-supplied approvals and files",
+      "passed": true
+    },
+    {
+      "test": "Profile edit preserves server-owned approvals, files and music duration",
+      "passed": true
+    },
+    {
+      "test": "Separate staff device access generated",
+      "passed": true
+    },
+    {
+      "test": "Independent device sees same cloud event",
+      "passed": true
+    },
+    {
+      "test": "Staff can synchronize allowed operational state",
+      "passed": true
+    },
+    {
+      "test": "Staff cannot alter organization identity",
+      "passed": true
+    },
+    {
+      "test": "Stale device write rejected with revision conflict",
+      "passed": true
+    },
+    {
+      "test": "QA enrollment closed after tests",
+      "passed": true
+    }
+  ],
+  "passed": 37,
+  "failed": 0
+}

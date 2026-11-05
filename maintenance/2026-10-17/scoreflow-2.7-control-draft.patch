@@ -1,0 +1,90 @@
+--- a/app.js
++++ b/app.js
+@@ -1985,6 +1985,50 @@
+     });
+   }
+ 
++  function controlScoreContext(organization) {
++    const event = ensureEventData(organization.events[0]);
++    const participant = currentParticipant(event);
++    return participant ? JSON.stringify([organization.id, event.id, participant.id, participant.round || activeRound(event), participant.attempt || 1]) : "";
++  }
++
++  function readControlScoreDraft() {
++    const form = $("#scoreForm");
++    if (!form) return null;
++    return {
++      context: form.dataset.scoreContext,
++      judgeId: $("#scoreJudge", form)?.value,
++      fields: $$(".score-value, #scorePenalty, #scoreNote", form).map(input => ({
++        criterionId: input.dataset.criterion || "",
++        id: input.id,
++        value: input.value
++      }))
++    };
++  }
++
++  function renderControlPreservingDraft(organization, message = "") {
++    const draft = readControlScoreDraft();
++    renderControl(organization, message);
++    const form = $("#scoreForm");
++    if (!form || !draft || draft.context !== form.dataset.scoreContext) return;
++    const judgeSelect = $("#scoreJudge", form);
++    if (judgeSelect && ![...judgeSelect.options].some(option => option.value === draft.judgeId)) return;
++    if (judgeSelect) judgeSelect.value = draft.judgeId;
++    const fields = $$(".score-value, #scorePenalty, #scoreNote", form);
++    draft.fields.forEach(saved => {
++      const input = fields.find(field => saved.criterionId ? field.dataset.criterion === saved.criterionId : field.id === saved.id);
++      if (input) input.value = saved.value;
++    });
++  }
++
++  function scheduleControlRefresh(organization) {
++    clearTimeout(controlRefreshTimer);
++    controlRefreshTimer = setTimeout(() => {
++      if (currentDashboardModule !== "control") return;
++      const latest = platform.organizations.find(item => item.id === organization.id);
++      if (latest && editingOrganizationId === latest.id) renderControlPreservingDraft(latest);
++    }, 15000);
++  }
++
+   function renderControl(organization, message = "") {
+     clearTimeout(controlRefreshTimer);
+     const event = ensureEventData(organization.events[0]);
+@@ -2042,7 +2086,8 @@
+       event.control.currentParticipantId = event.participants[0]?.id || null;
+       saveRuntime(organization); renderControl(organization, `${current.name} eliminato definitivamente.`);
+     });
+-    $(".refresh-control").addEventListener("click", () => renderControl(organization));
++    $("#scoreForm")?.setAttribute("data-score-context", controlScoreContext(organization));
++    $(".refresh-control").addEventListener("click", () => renderControlPreservingDraft(organization));
+     if ($("#scoreForm")) $("#scoreForm").addEventListener("submit", submitEvent => {
+       submitEvent.preventDefault();
+       const judgeId = $("#scoreJudge").value;
+@@ -2051,7 +2096,7 @@
+       if (!result?.ok) alert(result.error);
+     });
+     $$("[data-notification-participant]", $("#moduleContent")).forEach(button => button.addEventListener("click", () => { event.control.mode = "manual"; event.control.currentParticipantId = button.dataset.notificationParticipant; saveRuntime(organization); renderControl(organization); }));
+-    if (current.status === "competing" && !progress.complete) controlRefreshTimer = setTimeout(() => renderControl(organization), 15000);
++    if (current.status === "competing" && !progress.complete) scheduleControlRefresh(organization);
+   }
+ 
+   function athleteReportHtml(organization, participant) {
+@@ -2152,6 +2197,8 @@
+   }
+ 
+   function renderDashboardModule(module, organization, message = "") {
++    clearTimeout(controlRefreshTimer);
++    currentDashboardModule = module;
+     const event = ensureEventData(organization.events[0]);
+     const content = $("#moduleContent");
+     if (module === "overview") {
+@@ -2191,7 +2238,7 @@
+     if (module === "judge") return renderJudgeStation(organization);
+     if (module === "presenter") return renderPresenter(organization);
+     if (module === "staff") return renderStaff(organization);
+-    if (module === "control") return renderControl(organization);
++    if (module === "control") return renderControlPreservingDraft(organization);
+     if (module === "eliminations") return renderEliminations(organization);
+     if (module === "results") return renderResults(organization);
+     if (module === "public") return renderPublic(organization);

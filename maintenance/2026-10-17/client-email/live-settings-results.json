@@ -1,0 +1,45 @@
+{
+  "origin": "https://scoreflow.dynamiczen.it",
+  "tenantKey": "qa-registration-20261017113356-b081bf",
+  "emailDeliveryAttempted": false,
+  "results": [
+    {
+      "test": "Settings require organization administrator",
+      "passed": true
+    },
+    {
+      "test": "Another secret cannot read settings",
+      "passed": true
+    },
+    {
+      "test": "Owner reads settings",
+      "passed": true
+    },
+    {
+      "test": "Owner saves disabled synthetic configuration",
+      "passed": true
+    },
+    {
+      "test": "Saved configuration persists without returning API key",
+      "passed": true
+    },
+    {
+      "test": "Enable uses previously saved encrypted key",
+      "passed": true
+    },
+    {
+      "test": "Staff device cannot read email settings",
+      "passed": true
+    },
+    {
+      "test": "Blank key preserves credential when editing",
+      "passed": true
+    },
+    {
+      "test": "QA key removed and sending disabled after tests",
+      "passed": true
+    }
+  ],
+  "passed": 9,
+  "failed": 0
+}

@@ -265,7 +265,7 @@
     persistPlatform();
   }
 
-  async function pushCloudState(organization, retry = true) {
+  async function pushCloudState(organization, retriesRemaining = 5) {
     if (cloudSyncInFlight) return queueCloudSync(organization);
     const cloud = isRoleDevice(organization) ? organization.cloud : ensureCloudIdentity(organization);
     cloudSyncInFlight = true;
@@ -276,7 +276,7 @@
         headers: cloudHeaders(cloud, true),
         body: JSON.stringify({ revision: cloud.revision, state: organizationForCloud(organization) })
       });
-      if (response.status === 409 && retry) {
+      if (response.status === 409 && retriesRemaining > 0) {
         const preview=await response.clone().json();
         if(preview.error!=="revision-conflict") throw Object.assign(new Error(preview.message || "Limite della prova raggiunto"),{status:409,trialRejected:true});
         const conflict = await response.json();
@@ -287,7 +287,7 @@
         editingOrganizationId = merged.id;
         persistPlatform();
         cloudSyncInFlight = false;
-        return pushCloudState(merged, false);
+        return pushCloudState(merged, retriesRemaining - 1);
       }
       if (!response.ok) {const problem=await response.json();throw Object.assign(new Error(problem.message || "Sincronizzazione non disponibile"), { status: response.status,trialRejected:response.status===403 || response.status===401 });}
       const result = await response.json();
@@ -2992,4 +2992,5 @@
 
   initializeApplication();
 })();
+
 

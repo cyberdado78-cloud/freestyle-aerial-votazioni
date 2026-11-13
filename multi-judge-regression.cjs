@@ -72,7 +72,7 @@ const judges=[1,2,3].map(i=>({id:'j'+i,name:'TEST Judge '+i,code:String(i).repea
 const participants=[1,2,3,4,5,6].map(i=>({id:'p'+i,name:'TEST Athlete '+i,categoryId:'open',discipline:'Tessuti',round:'qualification',attempt:1,status:i===6?'competing':'completed',order:i}));
 function score(i,j,value){return{id:'s-'+i+'-'+j,participantId:'p'+i,judgeId:'j'+j,round:'qualification',attempt:1,values:Object.fromEntries(Array.from({length:6},(_,k)=>['fac-'+k,value])),penalty:0,note:'',submittedAt:'2026-11-10T12:00:00Z',locked:true};}
 const historic=[1,2,3,4,5].flatMap(i=>[1,2,3].map(j=>score(i,j,6)));
-const fixture={id:'test-org',name:'TEST isolated simulation',slug:'qa-multi',cloud:{tenantKey:'qa-multi'},updatedAt:'2026-11-10T11:00:00Z',events:[{id:'test-event',name:'TEST synthetic copy',competitionRules:Rules.preset(),scoring:{criteria:Rules.criteria(),aggregation:'average',minimumJudges:3,judgeCount:3,penalties:{noteRequired:true}},categories:[{id:'open',name:'Open'}],disciplines:['Tessuti'],participants,judges,scores:clone(historic),control:{currentParticipantId:'p6',status:'running',mode:'automatic',round:'qualification',repeatQueue:[]},rules:{reviewRequired:false},rounds:{enabled:false}}]};
+const fixture={id:'test-org',name:'TEST isolated simulation',slug:'qa-multi',cloud:{tenantKey:'qa-multi'},updatedAt:'2026-11-10T11:00:00Z',events:[{id:'test-event',name:'TEST synthetic copy',competitionRules:Rules.preset(),scoring:{criteria:Rules.criteria(),aggregation:'average',minimumJudges:3,judgeCount:3,penalties:{enabled:true,noteRequired:true}},categories:[{id:'open',name:'Open'}],disciplines:['Tessuti'],participants,judges,scores:clone(historic),control:{currentParticipantId:'p6',status:'running',mode:'automatic',round:'qualification',repeatQueue:[]},rules:{reviewRequired:false},rounds:{enabled:false}}]};
 const tokens=[1,2,3,4].map(i=>('test-token-'+i+'-').repeat(4));
 function browserClient(i,state=fixture){
  const d=new JSDOM(fs.readFileSync('index.html','utf8'),{url:'http://127.0.0.1/',runScripts:'outside-only'}),w=d.window;
@@ -88,6 +88,10 @@ function browserClient(i,state=fixture){
   tables.set('scoreflow_tenants',[{tenant_key:'qa-multi',revision:1,state_json:clone(fixture),updated_at:fixture.updatedAt}]);
   tables.set('scoreflow_access_tokens',tokens.map((token,i)=>({id:'access-'+i,tenant_key:'qa-multi',event_id:'test-event',role:i===3?'control':'judge',token_hash:context.api.hashSecret(token),active:true})));
   const clients=[0,1,2].map(i=>browserClient(i));
+  for (let i=0;i<3;i++) {
+   const auth=await api('POST','/api/tenants/qa-multi/judge-auth',{code:judges[i].code},'',{'X-ScoreFlow-Access':tokens[i]});
+   assert.equal(auth.status,200,JSON.stringify(auth.body));clients[i].get().cloud.judgeTicket=auth.body.ticket;
+  }
   clients.forEach((c,i)=>c.get().events[0].scores.push(score(6,i+1,6+i)));
   const control=browserClient(3);
   check('regia blocks advancement before three votes',()=>assert.equal(control.voteProgress(control.get().events[0],participants[5]).complete,false));
@@ -120,3 +124,4 @@ function browserClient(i,state=fixture){
   console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=1;
  }finally{windows.forEach(d=>d.window.close());context.api.server.closeAllConnections();await new Promise(r=>context.api.server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

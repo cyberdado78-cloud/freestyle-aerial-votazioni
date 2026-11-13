@@ -38,6 +38,7 @@
     return a.getUTCFullYear()-b.getUTCFullYear() - (at.slice(5)<birth.slice(5) ? 1:0);
   }
   function issues(event, profile, registrationDate) {
+    if (event.rules?.reviewRequired) return ['Regolamento caricato in attesa di verifica e approvazione.'];
     const rules = event.competitionRules;
     if (!rules?.enabled) return [];
     const errors=[];
@@ -66,6 +67,7 @@
     return errors;
   }
   function scoreErrors(event, score) {
+    if (event.rules?.reviewRequired) return ['Approva la configurazione ricavata dal regolamento prima di votare.'];
     if (!event.competitionRules?.enabled) return [];
     const errors=[];
     if(event.competitionRules.profile==='custom'){
@@ -121,6 +123,8 @@
       if (old?.competitionRules?.enabled && old.scores?.length &&
         (canonicalJson(old.competitionRules)!==canonicalJson(event.competitionRules) || canonicalJson(old.scoring)!==canonicalJson(event.scoring) || canonicalJson(old.categories)!==canonicalJson(event.categories) || canonicalJson(old.disciplines)!==canonicalJson(event.disciplines)))
         throw Object.assign(new Error('Regole, criteri, categorie e discipline bloccati dopo il primo voto.'),{statusCode:409});
+      if (event.rules?.reviewRequired && (event.scores || []).some(score => !(old?.scores || []).some(previousScore => previousScore.id===score.id && canonicalJson(previousScore)===canonicalJson(score))))
+        throw Object.assign(new Error('Approva la configurazione ricavata dal regolamento prima di votare.'),{statusCode:409});
       if (event.competitionRules?.enabled) {
         const originals=new Map((old?.scores || []).map(s=>[s.id,canonicalJson(s)]));
         for (const score of event.scores || []) if (originals.get(score.id)!==canonicalJson(score)) {
@@ -132,3 +136,4 @@
   }
   return {catalog,preset,criteria,ageAt,issues,scoreErrors,judgeScore,compare,rank,groups,inGroup,validateState};
 });
+

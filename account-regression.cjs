@@ -138,3 +138,4 @@ const cases=[
  ['repeated login attempts are rate limited',async()=>{for(let i=0;i<7;i++)await api('POST','/api/account/login',{email:'rate@example.invalid',password:'wrong'});assert.equal((await api('POST','/api/account/login',{email:'rate@example.invalid',password:'wrong'})).status,429);}]
 ];
 (async()=>{const server=context.api.server;try{if(!server.listening)await once(server,'listening');origin='http://127.0.0.1:'+server.address().port;let failed=0;for(const[name,run]of cases){try{await run();console.log('PASS '+name);}catch(e){failed++;console.log('FAIL '+name+': '+e.stack);}}console.log(JSON.stringify({passed:cases.length-failed,failed}));process.exitCode=failed?1:0;}finally{server.closeAllConnections();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
+

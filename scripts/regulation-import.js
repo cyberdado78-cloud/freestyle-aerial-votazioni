@@ -8,15 +8,15 @@ function propose(text,event){
  const add=(field,value,l)=>findings.push({field,value,quote:l.text,line:l.line});
  for(const l of lines){
   let m;
-  if((m=l.text.match(/^(?:criterio|criterion)\s*:\s*(.{1,80}?)\s*[;|]\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)(?:\s*[;|]\s*(?:peso|weight)\s*[:=]?\s*(\d+(?:[.,]\d+)?))?\s*$/i)))add('criterion',{name:m[1],min:Number(m[2].replace(',','.')),max:Number(m[3].replace(',','.')),weight:Number((m[4]||'1').replace(',','.')),decimals:1},l);
-  if((m=l.text.match(/^(?:categorie|categories)\s*:\s*(.+)$/i)))add('categories',m[1].split(/[;,]/).map(x=>x.trim()).filter(Boolean),l);
-  if((m=l.text.match(/^(?:discipline|disciplines)\s*:\s*(.+)$/i)))add('disciplines',m[1].split(/[;,]/).map(x=>x.trim()).filter(Boolean),l);
-  if((m=l.text.match(/(?:giuria composta da|numero (?:di )?giudici|giudici)\s*:?\s*(\d+)\b/i)))add('minimumJudges',Number(m[1]),l);
-  if(/(?:somma|sum).{0,35}(?:criteri|criteria)/i.test(l.text))add('criteriaMode','sum',l);
-  if(/(?:media|average).{0,35}(?:criteri|criteria)/i.test(l.text))add('criteriaMode','average',l);
-  if(/(?:media|average).{0,55}(?:giudici|judges)/i.test(l.text))add('aggregation','average',l);
-  if(/(?:somma|sum).{0,55}(?:giudici|judges)/i.test(l.text))add('aggregation','sum',l);
-  if((m=l.text.match(/penalit[aày].{0,15}?(\d+(?:[.,]\d+)?)\s*(?:a|[-–])\s*(\d+(?:[.,]\d+)?)/i)))add('penalties',{min:Number(m[1].replace(',','.')),max:Number(m[2].replace(',','.'))},l);
+  if((m=l.text.match(/^(?:criterio|criterion|critère|critere)\s*:\s*(.{1,80}?)\s*[;|]\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)(?:\s*[;|]\s*(?:peso|weight|poids)\s*[:=]?\s*(\d+(?:[.,]\d+)?))?\s*$/iu)))add('criterion',{name:m[1],min:Number(m[2].replace(',','.')),max:Number(m[3].replace(',','.')),weight:Number((m[4]||'1').replace(',','.')),decimals:1},l);
+  if((m=l.text.match(/^(?:categorie|categories|catégories|categorías)\s*:\s*(.+)$/iu)))add('categories',m[1].split(/[;,]/).map(x=>x.trim()).filter(Boolean),l);
+  if((m=l.text.match(/^(?:discipline|disciplines|disciplinas)\s*:\s*(.+)$/iu)))add('disciplines',m[1].split(/[;,]/).map(x=>x.trim()).filter(Boolean),l);
+  if((m=l.text.match(/(?:giuria composta da|numero (?:di )?giudici|giudici|jury of|number of judges|judges|jury composé de|nombre de juges|juges|jurado de|número de jueces|jueces)\s*:?\s*(\d+)\b/iu)))add('minimumJudges',Number(m[1]),l);
+  if(/(?:somma|sum|somme|suma).{0,35}(?:criteri|criteria|critères|criterios)/iu.test(l.text))add('criteriaMode','sum',l);
+  if(/(?:media|average|moyenne|promedio).{0,35}(?:criteri|criteria|critères|criterios)/iu.test(l.text))add('criteriaMode','average',l);
+  if(/(?:media|average|moyenne|promedio).{0,55}(?:giudici|judges|juges|jueces)/iu.test(l.text))add('aggregation','average',l);
+  if(/(?:somma|sum|somme|suma).{0,55}(?:giudici|judges|juges|jueces)/iu.test(l.text))add('aggregation','sum',l);
+  if((m=l.text.match(/(?:penalit[aày]|penalt(?:y|ies)|pénalit(?:é|és)|penalizaci(?:ó|o)n(?:es)?).{0,18}?(\d+(?:[.,]\d+)?)\s*(?:a|to|à|[-–])\s*(\d+(?:[.,]\d+)?)/iu)))add('penalties',{min:Number(m[1].replace(',','.')),max:Number(m[2].replace(',','.'))},l);
  }
  const draft={sourceText:text,name:event.competitionRules?.source||'Regolamento personalizzato',criteria:clone(event.scoring.criteria),criteriaMode:event.competitionRules?.criteriaMode||'average',aggregation:event.scoring.aggregation||'average',minimumJudges:event.scoring.minimumJudges||3,penaltyMin:event.competitionRules?.penaltyMin??0,penaltyMax:event.competitionRules?.penaltyMax??10,disciplines:clone(event.disciplines||[]),categories:(event.categories||[]).map(c=>({id:c.id,name:c.name,minAge:null,maxAge:null,minSeconds:null,maxSeconds:null,...(event.competitionRules?.customCatalog||[]).find(s=>s.key===event.competitionRules?.categories?.[c.id])})),tieBreakIds:clone(event.competitionRules?.tieBreakIds||[]),findings,unresolved:[]};
  const criteria=findings.filter(f=>f.field==='criterion');if(criteria.length){draft.criteria=criteria.map((f,i)=>({...f.value,id:'rule-'+i}));draft.tieBreakIds=[];}
@@ -58,7 +58,8 @@ function apply(event,d,{text='',file=null,confirmed=false,now=new Date().toISOSt
  next.categories=d.categories.map(c=>({id:c.id,name:c.name}));next.disciplines=clone(d.disciplines);
  next.competitionRules={enabled:true,profile:'custom',source:d.name,criteriaMode:d.criteriaMode,penaltyMin:d.penaltyMin,penaltyMax:d.penaltyMax,categories:Object.fromEntries(d.categories.map(c=>[c.id,c.id])),customCatalog:d.categories.map(c=>({...c,key:c.id})),tieBreakIds:clone(d.tieBreakIds),decisionsConfirmed:true};
  const versions=clone(event.rules?.versions||[]);versions.push({number:versions.length+1,approvedAt:now,name:d.name,text,file:clone(file),configuration:clone({...d,sourceText:undefined})});
- next.rules={...next.rules,text,file:clone(file),versions,activeVersion:versions.length,proposal:null};return next;
+ next.rules={...next.rules,text,file:clone(file),versions,activeVersion:versions.length,proposal:null,reviewRequired:false,approvedAt:now};return next;
 }
 return {propose,validate,apply};
 });
+

@@ -118,8 +118,9 @@
     $('#accountScreen')?.classList.add('hidden');
     if(result.organization) {
       const remote=result.organization;
-      const org=remote.state;
-      org.cloud={tenantKey:remote.tenantKey,revision:remote.revision,status:'online',accountManaged:true};
+      const pending=platform.organizations.find(item=>item.cloud?.accountManaged && item.cloud?.tenantKey===remote.tenantKey && item.cloud?.pending);
+      const org=pending ? mergeCloudOrganization(pending,remote.state) : remote.state;
+      org.cloud={...(pending?.cloud || {}),tenantKey:remote.tenantKey,revision:remote.revision,status:pending?'connecting':'online',accountManaged:true};
       acceptEntitlements(org,remote.entitlements);
       const existing=platform.organizations.findIndex(x=>x.cloud?.tenantKey===remote.tenantKey);
       if(existing>=0) platform.organizations[existing]=org;else platform.organizations.push(org);
@@ -170,6 +171,7 @@
   let logoDataUrl = "";
   let selectedLogoFile = null;
   let selectedEventFiles = [];
+  let selectedRulesFile = null;
   let controlRefreshTimer = null;
   let cloudSyncTimer = null;
   let cloudPollTimer = null;
@@ -208,6 +210,7 @@
     if (json) headers["Content-Type"] = "application/json";
     if (cloud?.secret) headers["X-ScoreFlow-Key"] = cloud.secret;
     else if (cloud?.accessToken) headers["X-ScoreFlow-Access"] = cloud.accessToken;
+    if (cloud?.role === "judge" && cloud.judgeTicket) headers["X-ScoreFlow-Judge-Ticket"] = cloud.judgeTicket;
     return headers;
   }
 
@@ -233,6 +236,14 @@
   }
 
   function mergeCloudOrganization(local, remote) {
+    if (local.cloud?.role === "public") {
+      const result = JSON.parse(JSON.stringify(remote));
+      const votes = (local.events?.[0]?.publicVotes || []).map(vote => Object.fromEntries(["id","participantId","deviceId","value","createdAt"].filter(key => vote[key] !== undefined).map(key => [key,vote[key]])));
+      result.events[0].publicVotes = mergeCollection(result.events[0].publicVotes, votes);
+      result.id = local.id;
+      result.cloud = { ...local.cloud };
+      return result;
+    }
     const localTime = new Date(local.updatedAt || 0).getTime();
     const remoteTime = new Date(remote.updatedAt || 0).getTime();
     const base = JSON.parse(JSON.stringify(remoteTime > localTime ? remote : local));
@@ -264,58 +275,114 @@
     persistPlatform();
   }
 
-  async function pushCloudState(organization, retry = true) {
-    if (cloudSyncInFlight) return queueCloudSync(organization);
-    const cloud = isRoleDevice(organization) ? organization.cloud : ensureCloudIdentity(organization);
+  function refreshSyncFeedback(organization) {
+    updateConnectionStatus();
+    if (activeJudgeSession?.organizationId === organization.id && !$("#judgeScoreForm")) {
+      renderJudgeStation(organization, activeJudgeSession.judgeId);
+    }
+  }
+
+  async function pushCloudState(organization) {
+    if (cloudSyncInFlight) return;
     cloudSyncInFlight = true;
+    let cloud = isRoleDevice(organization) ? organization.cloud : ensureCloudIdentity(organization);
+    cloud.pending = true;
     try {
       if (!cloud.revision) await registerCloudTenant(organization);
-      const response = await fetch(cloudStateEndpoint(cloud), {
-        method: "PUT",
-        headers: cloudHeaders(cloud, true),
-        body: JSON.stringify({ revision: cloud.revision, state: organizationForCloud(organization) })
-      });
-      if (response.status === 409 && retry) {
-        const preview=await response.clone().json();
-        if(preview.error!=="revision-conflict") throw Object.assign(new Error(preview.message || "Limite della prova raggiunto"),{status:409,trialRejected:true});
-        const conflict = await response.json();
-        const merged = mergeCloudOrganization(organization, conflict.state);
-        merged.cloud = { ...cloud, revision: Number(conflict.revision) };
-        const index = platform.organizations.findIndex(item => item.id === organization.id);
-        if (index >= 0) platform.organizations[index] = merged;
-        editingOrganizationId = merged.id;
-        persistPlatform();
-        cloudSyncInFlight = false;
-        return pushCloudState(merged, false);
+      // A conflict can recur when several judges retry together. Keep the local
+      // outbox until a server acknowledgment covers the exact submitted version.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        organization = platform.organizations.find(item => item.id === organization.id) || organization;
+        cloud = organization.cloud;
+        const version = Number(cloud.pendingVersion) || 0;
+        const response = await fetch(cloudStateEndpoint(cloud), {
+          method: "PUT", headers: cloudHeaders(cloud, true),
+          body: JSON.stringify({ revision: cloud.revision, state: organizationForCloud(organization) })
+        });
+        const result = await response.json();
+        if (response.status === 409 && result.error === "revision-conflict") {
+          const latest = platform.organizations.find(item => item.id === organization.id) || organization;
+          const merged = mergeCloudOrganization(latest, result.state);
+          merged.cloud = { ...latest.cloud, revision: Number(result.revision), pending: true };
+          const index = platform.organizations.findIndex(item => item.id === organization.id);
+          if (index >= 0) platform.organizations[index] = merged;
+          organization = merged; cloud = merged.cloud;
+          persistPlatform();
+          continue;
+        }
+        if (!response.ok) throw Object.assign(new Error(result.message || "Sincronizzazione non disponibile"), {
+          status: response.status, judgeAuthRequired: result.error === "judge-auth-required", trialRejected: response.status === 401 || response.status === 403 || response.status === 409
+        });
+        const latest = platform.organizations.find(item => item.id === organization.id) || organization;
+        cloud = latest.cloud;
+        cloud.revision = Number(result.revision);
+        cloud.pending = (Number(cloud.pendingVersion) || 0) !== version;
+        cloud.status = cloud.pending ? "connecting" : "online";
+        cloud.retryAt = 0; cloud.retryCount = 0;
+        cloud.lastSyncedAt = new Date().toISOString();
+        persistPlatform(); refreshSyncFeedback(latest);
+        return;
       }
-      if (!response.ok) {const problem=await response.json();throw Object.assign(new Error(problem.message || "Sincronizzazione non disponibile"), { status: response.status,trialRejected:response.status===403 || response.status===401 });}
-      const result = await response.json();
-      cloud.revision = Number(result.revision);
-      cloud.status = "online";
-      cloud.lastSyncedAt = new Date().toISOString();
-      persistPlatform();
+      throw new Error("Sincronizzazione in attesa: nuovi voti ricevuti da altre postazioni.");
     } catch (error) {
+      cloud.pending = true;
       cloud.status = error.status === 503 ? "setup-required" : "offline";
-      if(error.trialRejected){
-        const response=await fetch(cloudStateEndpoint(cloud),{headers:cloudHeaders(cloud)});
-        if(response.ok){const result=await response.json();Object.assign(organization,result.state);organization.cloud=cloud;cloud.revision=Number(result.revision);acceptEntitlements(organization,result.entitlements);renderDashboardModule(currentDashboardModule,organization);}
+      cloud.retryCount = Math.min((Number(cloud.retryCount) || 0) + 1, 5);
+      cloud.retryAt = Date.now() + Math.min(30000, 1000 * 2 ** cloud.retryCount);
+      if (error.judgeAuthRequired) {
+        delete cloud.judgeTicket;
+        cloud.pending = true; cloud.syncBlocked = true; cloud.status = "auth-required";
+        persistPlatform(); renderJudgeStation(organization);
+        showToast(error.message); return;
+      }
+      if (error.trialRejected) {
+        // Permission/quota failures need user action, not endless write retries.
+        cloud.pending = false;
+        cloud.syncBlocked = true;
+        try {
+          const response = await fetch(cloudStateEndpoint(cloud), {headers: cloudHeaders(cloud)});
+          if (response.ok) { const result = await response.json(); Object.assign(organization, result.state); organization.cloud = cloud; cloud.revision = Number(result.revision); acceptEntitlements(organization, result.entitlements); renderDashboardModule(currentDashboardModule, organization); }
+        } catch (_) { /* Retain the local copy if even the read is unavailable. */ }
         showToast(error.message);
       }
       console.warn("ScoreFlow cloud", error.message);
-      persistPlatform();
+      persistPlatform(); refreshSyncFeedback(organization);
     } finally {
       cloudSyncInFlight = false;
     }
   }
 
   function queueCloudSync(organization) {
+    const cloud = organization.cloud || ensureCloudIdentity(organization);
+    cloud.pending = true;
+    cloud.pendingVersion = (Number(cloud.pendingVersion) || 0) + 1;
+    cloud.retryAt = 0;
+    cloud.syncBlocked = false;
+    cloud.status = "connecting";
+    persistPlatform();
     clearTimeout(cloudSyncTimer);
-    cloudSyncTimer = setTimeout(() => pushCloudState(organization), 350);
+    cloudSyncTimer = setTimeout(() => {
+      const latest = platform.organizations.find(item => item.id === organization.id) || organization;
+      pushCloudState(latest);
+    }, 350);
   }
+
+  window.addEventListener("online", () => {
+    const organization = platform.organizations.find(item => item.id === editingOrganizationId);
+    if (!organization?.cloud?.syncBlocked && (organization?.cloud?.pending || organization?.cloud?.status === "offline")) {
+      organization.cloud.retryAt = 0;
+      pushCloudState(organization);
+    }
+  });
 
   async function pullCloudState(organization) {
     const cloud = organization.cloud;
     if (!cloud?.tenantKey || (!cloud?.secret && !cloud?.accessToken && !cloud?.accountManaged) || !cloud.revision) return;
+    if (cloudSyncInFlight) return;
+    if (!cloud.syncBlocked && (cloud.pending || cloud.status === "offline")) {
+      if (Date.now() >= (Number(cloud.retryAt) || 0)) await pushCloudState(organization);
+      return;
+    }
     if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
     try {
       const response = await fetch(cloudStateEndpoint(cloud), { headers: cloudHeaders(cloud) });
@@ -396,6 +463,8 @@
     event.roundHistory = Array.isArray(event.roundHistory) ? event.roundHistory : [];
     event.notifications = Array.isArray(event.notifications) ? event.notifications : [];
     event.rules = event.rules || { text: "", file: null };
+    event.rules.reviewRequired = Boolean(event.rules.reviewRequired);
+    event.rules.proposal = event.rules.proposal || null;
     event.registration = event.registration || {
       enabled: false,
       preRegistrationOpensAt: "",
@@ -728,6 +797,25 @@
     }));
   }
 
+  function selectSetupRulesFile(file, target = "setup") {
+    const status = target === "quick" ? $("#quickRulesStatus") : $("#setupRulesFileState");
+    if (!file) {
+      selectedRulesFile = null;
+      if (status) status.textContent = "Nessun regolamento selezionato.";
+      return true;
+    }
+    if (file.size > 10 * 1024 * 1024 || !/\.(pdf|docx)$/i.test(file.name)) {
+      selectedRulesFile = null;
+      if (status) status.textContent = "Carica un file PDF o DOCX di massimo 10 MB.";
+      return false;
+    }
+    selectedRulesFile = file;
+    const message = `${file.name} · ${formatBytes(file.size)} · verrà analizzato dopo il salvataggio`;
+    if ($("#quickRulesStatus")) $("#quickRulesStatus").textContent = message;
+    if ($("#setupRulesFileState")) $("#setupRulesFileState").textContent = message;
+    return true;
+  }
+
   function readLogo(file) {
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
@@ -827,7 +915,7 @@
           penalties: { enabled: $("#penaltiesEnabled").checked, noteRequired: $("#penaltyNoteRequired").checked },
           judgeSubstitutionLog: $("#judgeSubstitutionLog").checked
         },
-        publicVoting: { enabled: $("#publicVoting").checked, qrEnabled: $("#publicVoting").checked && $("#publicQr").checked, oneVotePerDevice: true },
+        publicVoting: { ...existing?.events?.[0]?.publicVoting, award: $("#publicVoting").checked ? null : existing?.events?.[0]?.publicVoting?.award || null, enabled: $("#publicVoting").checked, qrEnabled: $("#publicVoting").checked && $("#publicQr").checked, oneVotePerDevice: true },
         participants: existing?.events?.[0]?.participants || [],
         judges: existing?.events?.[0]?.judges || [],
         scores: existing?.events?.[0]?.scores || [],
@@ -837,7 +925,12 @@
         presenter: existing?.events?.[0]?.presenter || { selectedParticipantId: null, notes: {} },
         publicVotes: existing?.events?.[0]?.publicVotes || [],
         resultsValidated: existing?.events?.[0]?.resultsValidated || {},
-        rules: existing?.events?.[0]?.rules || { text: "", file: null },
+        rules: existing?.events?.[0]?.rules || {
+          text: $("#setupRulesText").value.trim(),
+          file: null,
+          proposal: null,
+          reviewRequired: Boolean(selectedRulesFile || $("#setupRulesText").value.trim())
+        },
         rounds: existing?.events?.[0]?.rounds || { enabled: false, finalistsPerCategory: 3, qualificationLabel: "Eliminatorie", finalLabel: "Finale" },
         control: existing?.events?.[0]?.control || { currentParticipantId: null, status: "setup" },
         registration: existing?.events?.[0]?.registration || { enabled: false, preRegistrationOpensAt: "", preRegistrationClosesAt: "", registrationClosesAt: "", instructions: "Compila tutti i campi richiesti. Potrai aggiornare la scheda fino alla chiusura delle iscrizioni." },
@@ -858,6 +951,8 @@
       ["Categorie", event.categories.length, event.disciplines.join(" · ")],
       ["Giuria", `${event.scoring.judgeCount} giudici`, `${event.scoring.minimumJudges} voti minimi`],
       ["Valutazione", `${event.scoring.criteria.length} criteri`, event.scoring.aggregation]
+      ,["Lingua", org.language.toUpperCase(), "Account, iscrizioni e comunicazioni"]
+      ,["Regolamento", selectedRulesFile?.name || (event.rules.text ? "Testo inserito" : "Da caricare"), event.rules.reviewRequired ? "Verifica obbligatoria prima del voto" : "Nessuna proposta in attesa"]
     ];
     $("#summary").innerHTML = items.map(([label, value, note]) => `<article class="summary-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong><small>${escapeHtml(String(note || ""))}</small></article>`).join("");
   }
@@ -1479,8 +1574,34 @@
         const asset = organization.events[0].assets.find(item => item.id === selected.id);
         if (asset) Object.assign(asset, cloud, { status: "stored-in-cloud" });
       }
+      const eventState = ensureEventData(organization.events[0]);
+      const pastedRules = $("#setupRulesText").value.trim();
+      if (selectedRulesFile) {
+        const blobKey = `${eventState.id}:regolamento:${Date.now()}`;
+        try { await storeLocalFile(blobKey, selectedRulesFile); } catch (error) { console.warn("Copia locale non disponibile", error); }
+        const cloud = await uploadCloudFile(organization, selectedRulesFile, "event-rules");
+        const { extractedText, extractionWarning, ...metadata } = cloud;
+        eventState.rules.file = { name: selectedRulesFile.name, size: selectedRulesFile.size, type: selectedRulesFile.type, blobKey, ...metadata, status: "stored-in-cloud" };
+        eventState.rules.text = String(extractedText || pastedRules || "").trim();
+        eventState.rules.extractionWarning = extractionWarning || null;
+        eventState.rules.reviewRequired = true;
+      } else if (pastedRules && pastedRules !== eventState.rules.text) {
+        eventState.rules.text = pastedRules;
+        eventState.rules.reviewRequired = true;
+      }
+      if (eventState.rules.reviewRequired && eventState.rules.text) eventState.rules.proposal = ScoreFlowRegulations.propose(eventState.rules.text, eventState);
     } catch (error) {
       uploadWarning = `Configurazione salvata, ma un file non è arrivato nel cloud: ${error.message}`;
+      const eventState = ensureEventData(organization.events[0]);
+      const pastedRules = $("#setupRulesText").value.trim();
+      if (selectedRulesFile) {
+        const blobKey = `${eventState.id}:regolamento:${Date.now()}`;
+        try { await storeLocalFile(blobKey, selectedRulesFile); } catch {}
+        eventState.rules.file = { name: selectedRulesFile.name, size: selectedRulesFile.size, type: selectedRulesFile.type, blobKey, status: "stored-locally" };
+      }
+      eventState.rules.text = pastedRules || eventState.rules.text;
+      eventState.rules.reviewRequired = Boolean(selectedRulesFile || eventState.rules.text);
+      if (eventState.rules.text) eventState.rules.proposal = ScoreFlowRegulations.propose(eventState.rules.text, eventState);
     }
     const index = platform.organizations.findIndex(item => item.id === organization.id);
     if (index >= 0) platform.organizations[index] = organization;
@@ -1547,6 +1668,9 @@
     event.categories.forEach(item => addCategory(item.name, item.id));
     selectedEventFiles = (event.assets || []).map(file => ({ ...file }));
     renderEventFiles();
+    selectedRulesFile = null;
+    $("#setupRulesText").value = event.rules?.text || "";
+    $("#setupRulesFileState").textContent = event.rules?.file ? `${event.rules.file.name} · già archiviato` : "Nessun regolamento selezionato.";
     $("#judgeCount").value = event.scoring.judgeCount;
     $("#minimumJudges").value = event.scoring.minimumJudges;
     $("#aggregation").value = event.scoring.aggregation;
@@ -1571,7 +1695,11 @@
     logoDataUrl = "";
     selectedEventFiles = [];
     selectedLogoFile = null;
+    selectedRulesFile = null;
     $("#configForm").reset();
+    $("#language").value = uiLanguage();
+    $("#setupRulesText").value = "";
+    $("#setupRulesFileState").textContent = "Nessun regolamento selezionato.";
     delete $("#orgSlug").dataset.edited;
     $("#trialDays").value = 14;
     $("#primaryColor").value = "#c1121f";
@@ -1619,7 +1747,12 @@
     const size = onboardingSizes[onboardingSize];
     const organizationName = $("#quickOrgName").value.trim() || profile.organization;
     const eventName = $("#quickEventName").value.trim() || profile.event;
+    const firstLanguage = $("#firstSetupLanguage").value || uiLanguage();
+    const firstRulesText = $("#quickRulesText").value.trim();
+    const firstRulesFile = selectedRulesFile;
     resetForm();
+    window.ScoreFlowI18n?.setLanguage(firstLanguage);
+    $("#language").value = firstLanguage;
     $("#orgName").value = organizationName;
     $("#orgSlug").value = `${slugify(organizationName) || "scoreflow"}-${crypto.randomUUID().slice(0,8)}`;
     $("#eventName").value = eventName;
@@ -1643,6 +1776,8 @@
     $("#publicQr").disabled = true;
     $("#penaltiesEnabled").checked = true;
     $("#penaltyNoteRequired").checked = true;
+    $("#setupRulesText").value = firstRulesText;
+    if (firstRulesFile) selectSetupRulesFile(firstRulesFile);
     updateTrialPreview();
     return { profile, size };
   }
@@ -1691,6 +1826,7 @@
 
   function showOnboarding() {
     $("#accountScreen")?.classList.add("hidden");
+    $("#firstSetupLanguage").value = uiLanguage();
     $$("[data-demo-size]").forEach(button=>{button.disabled=button.dataset.demoSize!=="compact";button.classList.toggle("active",button.dataset.demoSize==="compact");});
     closeDashboardNavigation();
     $("#onboarding").classList.remove("hidden");
@@ -1698,6 +1834,12 @@
 
   async function createGuidedDemo() {
     if (!organizerAccount) {showAccountScreen("signup");return;}
+    if (selectedRulesFile || $("#quickRulesText").value.trim()) {
+      startGuidedConfiguration();
+      goToStep(2);
+      showToast("Regolamento rilevato: completa l’evento e verifica la proposta prima di generare voti.");
+      return;
+    }
     onboardingSize="compact";
     const { profile, size } = applyOnboardingDefaults();
     const organization = formData();
@@ -1742,7 +1884,7 @@
     const event = organization.events[0];
     const role = organization.cloud?.role;
     const roleModules = { judge: "judge", presenter: "presenter", control: "control", staff: "staff", public: "public" };
-    const initialModule = roleModules[role] || "overview";
+    const initialModule = roleModules[role] || (event.rules?.reviewRequired ? "event" : "overview");
     applyBrandTheme(organization.brand.primaryColor, organization.brand.accentColor);
     $("main.layout").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
@@ -1804,15 +1946,17 @@
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.state) throw new Error(result.message || "Il collegamento non è valido o è stato sostituito.");
     const existing = platform.organizations.find(item => item.cloud?.tenantKey === tenantKey && item.cloud?.role === result.role);
-    const organization = result.state;
+    const pending = existing?.cloud?.pending && existing.cloud.accessToken === accessToken;
+    const organization = pending ? mergeCloudOrganization(existing, result.state) : result.state;
     organization.id = existing?.id || uid("device");
     organization.cloud = {
+      ...(pending ? existing.cloud : {}),
       tenantKey,
       accessToken,
       role: result.role,
       eventId: result.eventId,
       revision: Number(result.revision),
-      status: "online",
+      status: pending ? "connecting" : "online",
       lastSyncedAt: new Date().toISOString()
     };
     const existingIndex = platform.organizations.findIndex(item => item.id === organization.id);
@@ -2199,7 +2343,9 @@
 
   async function createDeviceAccessLink(organization, role) {
     const cloud = ensureCloudIdentity(organization);
-    if (!cloud.secret || !cloud.revision) throw new Error("Attendi la prima sincronizzazione cloud e riprova.");
+    // Account-managed organizers authenticate with their HttpOnly session cookies.
+    // Role devices cannot issue links, even if stale organizer metadata is present.
+    if (isRoleDevice(organization) || (!cloud.secret && !cloud.accountManaged) || !cloud.revision) throw new Error("Attendi la prima sincronizzazione cloud e riprova.");
     const event = ensureEventData(organization.events[0]);
     const response = await fetch(`/api/tenants/${encodeURIComponent(cloud.tenantKey)}/access`, {
       method: "POST",
@@ -2245,7 +2391,7 @@
       ["public", "05", "Pubblico", "Vista live e voto popolare separato dalla classifica ufficiale.", event.publicVoting.enabled ? "Voto attivo" : "Solo visualizzazione"]
     ];
     const qrPanel = event.publicVoting.enabled ? `<article class="dash-card qr-panel"><div><p class="eyebrow">QR pubblico opzionale</p><h3>${event.publicVoting.qrEnabled ? "Genera il QR quando serve" : "QR non attivo"}</h3><p class="muted">Il cliente decide se abilitarlo. La funzione è inclusa anche nella prova gratuita.</p></div>${event.publicVoting.qrEnabled ? '<button class="button primary" id="generatePublicQr" type="button">Genera QR</button>' : ""}<div id="publicQrResult"></div></article>` : "";
-    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Centro operativo</p><h2>Postazioni gara</h2><p>Ogni ruolo vede soltanto le informazioni e i comandi necessari.</p></div><span class="live-chip"><i></i> Sistema pronto</span></div><div class="station-grid">${stations.map(([role, number, title, description, meta]) => `<button class="station-card station-${role}" data-station="${role}"><span class="station-number">${number}</span><div class="station-icon">${sfIcon(role === "judge" ? "judges" : role)}</div><h3>${title}</h3><p>${description}</p><small>${meta}</small><strong>Apri postazione →</strong></button>`).join("")}</div><article class="dash-card device-access-panel"><div class="section-heading"><div><p class="eyebrow">Accesso multi-dispositivo</p><h3>Collega telefoni, tablet e computer</h3><p class="muted">Genera un link per ciascun ruolo. Creandone uno nuovo, il precedente dello stesso ruolo viene disattivato.</p></div></div><div class="device-link-grid">${stations.map(([role,,title]) => `<div class="device-link-row"><div><strong>${escapeHtml(title)}</strong><small>${links[role] ? "Collegamento pronto" : "Non ancora generato"}</small></div><div>${links[role] ? `<button class="button ghost mini" data-copy-device="${role}">Copia link</button>` : ""}<button class="button primary mini" data-create-device="${role}">${links[role] ? "Rigenera" : "Genera link"}</button></div></div>`).join("")}</div><div id="deviceLinkMessage" class="inline-message"></div></article>${qrPanel}`;
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Centro operativo</p><h2>Postazioni gara</h2><p>Ogni ruolo vede soltanto le informazioni e i comandi necessari.</p></div><span class="live-chip"><i></i> Sistema pronto</span></div><div class="station-grid">${stations.map(([role, number, title, description, meta]) => `<button class="station-card station-${role}" data-station="${role}"><span class="station-number">${number}</span><div class="station-icon">${sfIcon(role === "judge" ? "judges" : role)}</div><h3>${title}</h3><p>${description}</p><small>${meta}</small><strong>Apri postazione →</strong></button>`).join("")}</div><article class="dash-card device-access-panel"><div class="section-heading"><div><p class="eyebrow">Accesso multi-dispositivo</p><h3>Collega telefoni, tablet e computer</h3><p class="muted">Genera un link per ciascun ruolo. Creandone uno nuovo, il precedente dello stesso ruolo viene disattivato.</p></div></div><div class="device-link-grid">${stations.map(([role,,title]) => `<div class="device-link-row"><div><strong>${escapeHtml(title)}</strong><small>${links[role] ? "Collegamento pronto" : "Non ancora generato"}</small></div><div>${links[role] ? `<a class="button ghost mini" data-open-device="${role}" href="${escapeHtml(links[role].url)}" target="_blank" rel="noopener noreferrer">Apri link</a><button class="button ghost mini" data-copy-device="${role}">Copia link</button>` : ""}<button class="button primary mini" data-create-device="${role}">${links[role] ? "Rigenera" : "Genera link"}</button></div></div>`).join("")}</div><div id="deviceLinkMessage" class="inline-message"></div></article>${qrPanel}`;
     $$('[data-station]', $("#moduleContent")).forEach(button => button.addEventListener("click", () => activateDashboardModule(button.dataset.station, organization)));
     $$('[data-copy-device]', $("#moduleContent")).forEach(button => button.addEventListener("click", async () => {
       await copyText(loadDeviceLinks(organization)[button.dataset.copyDevice]?.url || "");
@@ -2280,14 +2426,28 @@
   function renderJudgeStation(organization, judgeId = null, message = "") {
     const event = ensureEventData(organization.events[0]);
     const activeJudges = event.judges.filter(item => item.active);
+    if (isRoleDevice(organization) && organization.cloud.role === "judge" && !organization.cloud.judgeTicket) judgeId = null;
     if (!judgeId) {
       activeJudgeSession = null;
       $("#moduleContent").innerHTML = `<div class="role-shell judge-shell"><div class="role-top"><button class="button ghost station-back">← Postazioni</button><span class="live-chip"><i></i> Giuria online</span></div><article class="role-login"><span class="role-symbol">✦</span><p class="eyebrow">Postazione giudice</p><h2>Accedi alla tua scheda</h2><p>Inserisci il codice personale fornito dalla regia.</p>${activeJudges.length ? '<form id="judgeLoginForm"><label>Codice giudice<input id="judgeLoginCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="••••" required></label><button class="button primary" type="submit">Entra nella postazione</button></form>' : '<div class="warning-box">Nessun giudice attivo. Configura prima la giuria.</div>'}<div id="judgeLoginMessage" class="inline-message error"></div></article></div>`;
       $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
-      if ($("#judgeLoginForm")) $("#judgeLoginForm").addEventListener("submit", submitEvent => {
+      if ($("#judgeLoginForm")) $("#judgeLoginForm").addEventListener("submit", async submitEvent => {
         submitEvent.preventDefault();
         const code = $("#judgeLoginCode").value.trim();
-        const judge = activeJudges.find(item => String(item.code) === code);
+        let judge;
+        if (isRoleDevice(organization)) {
+          const button = $("#judgeLoginForm button"); button.disabled = true;
+          try {
+            const response = await fetch(`/api/tenants/${encodeURIComponent(organization.cloud.tenantKey)}/judge-auth`, { method: "POST", headers: cloudHeaders(organization.cloud, true), body: JSON.stringify({ code }) });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Accesso giudice non riuscito.");
+            judge = activeJudges.find(item => item.id === result.judgeId);
+            if (!judge) throw new Error("Giudice non disponibile.");
+            if (organization.cloud.pending && organization.cloud.judgeId && organization.cloud.judgeId !== result.judgeId) throw new Error("Sincronizza prima i dati in attesa accedendo con lo stesso codice giudice.");
+            organization.cloud.judgeTicket = result.ticket;
+            organization.cloud.judgeId = result.judgeId;
+          } catch (error) { button.disabled = false; return setMessage("judgeLoginMessage", error.message, true); }
+        } else judge = activeJudges.find(item => String(item.code) === code);
         if (!judge) return setMessage("judgeLoginMessage", "Codice non riconosciuto o giudice disattivato.", true);
         judge.lastActivityAt = new Date().toISOString();
         saveRuntime(organization);
@@ -2306,18 +2466,27 @@
       return;
     }
     const existingScore = participantScores(event, participant).find(item => item.judgeId === judge.id);
+    const pendingScore = existingScore && (organization.cloud?.pending || organization.cloud?.status === "offline");
+    const pendingCopy = {
+      it: ["Voto salvato sul dispositivo", "In attesa della conferma della regia. Non chiudere questa scheda: l’invio sarà ritentato automaticamente."],
+      en: ["Score saved on this device", "Waiting for control desk confirmation. Keep this tab open: submission will retry automatically."],
+      fr: ["Note enregistrée sur cet appareil", "En attente de confirmation de la régie. Gardez cet onglet ouvert : l’envoi sera réessayé automatiquement."],
+      es: ["Voto guardado en este dispositivo", "Esperando confirmación de la mesa de control. Mantén esta pestaña abierta: el envío se reintentará automáticamente."]
+    }[language];
+    const sentTitle = pendingScore ? pendingCopy[0] : t.sent;
+    const sentText = pendingScore ? pendingCopy[1] : t.sentText;
     const locked = !["ready", "competing"].includes(participant.status);
     const entryVideo = participant.attachments?.entryVideo;
     const rulesText = event.rules.text || "Nessun testo del regolamento disponibile.";
     $("#moduleContent").innerHTML = `<div class="role-shell judge-shell"><div class="role-top"><div><button class="button ghost station-back">← ${t.back}</button><button class="button ghost judge-logout">${t.change}</button></div><div class="judge-tools"><label>Language<select id="judgeUiLanguage"><option value="it" ${language === "it" ? "selected" : ""}>Italiano</option><option value="en" ${language === "en" ? "selected" : ""}>English</option><option value="fr" ${language === "fr" ? "selected" : ""}>Français</option><option value="es" ${language === "es" ? "selected" : ""}>Español</option></select></label><div class="judge-identity"><span>Giudice</span><strong>${escapeHtml(judge.name)}</strong></div></div></div>
       <article class="role-athlete judge-athlete-card"><div class="judge-athlete-photo">${participant.photoDataUrl ? `<img src="${participant.photoDataUrl}" alt="${escapeHtml(participant.name)}">` : `<span>${escapeHtml(participant.name.charAt(0) || "A")}</span>`}</div><div><p class="eyebrow">${t.athlete}</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span><p class="athlete-description">${escapeHtml(participant.description || "Descrizione atleta non presente.")}</p></div><span class="state-badge ${participant.status}">${locked ? t.waiting : participant.status === "competing" ? "Live" : "Ready"}</span></article>
       <div class="judge-info-grid"><article class="dash-card choreography-card"><span>Titolo</span><strong>${escapeHtml(participant.choreographyTitle || t.noTitle)}</strong><span>Tema</span><p>${escapeHtml(participant.choreographyTheme || t.noTheme)}</p>${entryVideo?.blobKey || entryVideo?.cloudPath ? `<button class="button ghost judge-entry-video">▶ ${t.video}</button>` : '<small>Video entry non caricato</small>'}</article><article class="dash-card judge-rules"><div class="section-heading"><div><h3>${t.rules}</h3><p class="muted">PDF e testo consultabile senza uscire dalla votazione.</p></div>${event.rules.file?.blobKey || event.rules.file?.cloudPath ? `<button class="button mini open-judge-rules">Apri regolamento</button>` : ""}</div><label>${t.search}<input id="judgeRulesSearch" type="search" placeholder="${t.search}..."></label><div id="judgeRulesResult" class="rules-search-result">${escapeHtml(rulesText)}</div></article></div>
-      <article class="dash-card judge-score-card"><div class="section-heading"><div><h3>${t.scoring}</h3><p class="muted">${existingScore ? t.sentText : t.instruction}</p></div></div>
-      ${existingScore ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${t.sent}</strong><p>${t.sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event)}</div>${event.scoring.penalties.enabled ? `<div class="penalty-panel"><label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="0"></label><label>Motivazione penalità<input id="scoreNote" placeholder="Richiesta solo se applichi una penalità"></label></div>` : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}"></textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
-      <div id="judgeVoteFeedback" class="feedback-banner ${message ? "success" : "hidden"}"><span>✓</span><div><strong>${t.sent}</strong><p>${escapeHtml(message)}</p></div></div></article></div>`;
+      <article class="dash-card judge-score-card"><div class="section-heading"><div><h3>${t.scoring}</h3><p class="muted">${existingScore ? sentText : t.instruction}</p></div></div>
+      ${existingScore ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${sentTitle}</strong><p>${sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event)}</div>${event.scoring.penalties.enabled ? `<div class="penalty-panel"><label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="0"></label><label>Motivazione penalità<input id="scoreNote" placeholder="Richiesta solo se applichi una penalità"></label></div>` : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}"></textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
+      <div id="judgeVoteFeedback" class="feedback-banner ${message && !pendingScore ? "success" : "hidden"}"><span>✓</span><div><strong>${t.sent}</strong><p>${escapeHtml(message)}</p></div></div></article></div>`;
     $("#judgeScoreForm")?.setAttribute("data-score-context", controlScoreContext(organization, judge.id));
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
-    $(".judge-logout").addEventListener("click", () => renderJudgeStation(organization));
+    $(".judge-logout").addEventListener("click", () => { delete organization.cloud?.judgeTicket; if (!organization.cloud?.pending) delete organization.cloud?.judgeId; persistPlatform(); renderJudgeStation(organization); });
     $("#judgeUiLanguage").addEventListener("change", changeEvent => { judge.language = changeEvent.target.value; saveRuntime(organization); renderJudgeStation(organization, judge.id); });
     if ($(".judge-entry-video")) $(".judge-entry-video").addEventListener("click", () => previewManagedVideo(organization, entryVideo, `Video entry · ${participant.name}`));
     if ($(".open-judge-rules")) $(".open-judge-rules").addEventListener("click", () => openManagedFile(organization, event.rules.file));
@@ -2383,6 +2552,51 @@
     }));
   }
 
+  function publicStandings(event) {
+    const participants = new Map((event.participants || []).map(p => [p.id, p]));
+    const seenIds = new Set(), seenDevices = new Set(), totals = new Map();
+    for (const vote of event.publicVotes || []) {
+      const value = Number(vote?.value), key = `${vote?.participantId}:${vote?.deviceId}`;
+      if (!vote?.id || !vote.deviceId || !participants.has(vote.participantId) || seenIds.has(vote.id) || seenDevices.has(key) || !Number.isFinite(value) || value < 1 || value > 10) continue;
+      seenIds.add(vote.id); seenDevices.add(key);
+      const total = totals.get(vote.participantId) || { sum: 0, count: 0 };
+      total.sum += value; total.count++; totals.set(vote.participantId, total);
+    }
+    const rows = [...totals].map(([id, t]) => ({ participant: participants.get(id), count: t.count, average: Math.round((t.sum / t.count + Number.EPSILON) * 100) / 100 }));
+    rows.sort((a, b) => b.average - a.average || String(a.participant.name).localeCompare(String(b.participant.name)) || String(a.participant.id).localeCompare(String(b.participant.id)));
+    rows.forEach((row, i) => { row.rank = i && row.average === rows[i - 1].average ? rows[i - 1].rank : i + 1; });
+    return rows;
+  }
+
+  function publicAwardBasis(event) {
+    return JSON.stringify(publicStandings(event).map(r => [r.participant.id, r.count, r.average]));
+  }
+
+  function publicResultsHtml(event, editable = false) {
+    const rows = publicStandings(event), leaders = rows.filter(r => r.rank === 1);
+    const award = event.publicVoting?.award;
+    const assigned = !event.publicVoting?.enabled && award?.basis === publicAwardBasis(event) && leaders.length && JSON.stringify(award.winnerIds) === JSON.stringify(leaders.map(r => r.participant.id));
+    const winnerNames = leaders.map(r => escapeHtml(r.participant.name)).join(' · ');
+    return `<section id="publicResults" class="dash-card public-results" aria-labelledby="publicResultsTitle"><p class="eyebrow">Premiazione separata dalla giuria</p><h2 id="publicResultsTitle">Classifica del pubblico</h2><p>Media dei voti validi da 1 a 10, arrotondata a due decimali. Un voto per dispositivo e atleta. In caso di parità, premio ex aequo. Nessun effetto sui punteggi della giuria.</p><p class="public-voting-state">${event.publicVoting?.enabled ? 'Votazione aperta · classifica provvisoria' : 'Votazione chiusa'}</p>${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Pos.</th><th>Atleta</th><th>Voti pubblico</th><th>Media pubblico</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.rank}</td><td>${escapeHtml(r.participant.name)}</td><td>${r.count}</td><td>${r.average.toFixed(2)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Nessun voto del pubblico registrato.</p>'}<div class="public-award" role="status"><h3>Premio del pubblico</h3><strong>${assigned ? `Assegnato${leaders.length > 1 ? ' ex aequo' : ''}: ${winnerNames}` : leaders.length ? `Da assegnare · in testa: ${winnerNames}` : 'Non assegnato'}</strong>${assigned ? `<p>Media ${leaders[0].average.toFixed(2)} · assegnato il ${escapeHtml(new Date(award.awardedAt).toLocaleString(localeForLanguage(uiLanguage())))}</p>` : ''}</div>${editable ? `<div class="public-award-actions">${event.publicVoting?.enabled ? `<button class="button primary" id="assignPublicAward" type="button" ${rows.length ? '' : 'disabled'}>Chiudi voto e assegna premio del pubblico</button>` : '<button class="button ghost" id="reopenPublicVoting" type="button">Riapri voto pubblico</button>'}</div><p class="muted">Riaprendo il voto, il premio torna da assegnare. I voti raccolti vengono conservati.</p>` : ''}</section>`;
+  }
+
+  function bindPublicAward(organization, refresh) {
+    if (isRoleDevice(organization)) return;
+    const event = ensureEventData(organization.events[0]);
+    $('#assignPublicAward')?.addEventListener('click', () => {
+      const leaders = publicStandings(event).filter(r => r.rank === 1);
+      if (!leaders.length || !event.publicVoting.enabled) return;
+      event.publicVoting.enabled = false;
+      event.publicVoting.award = { winnerIds: leaders.map(r => r.participant.id), average: leaders[0].average, basis: publicAwardBasis(event), awardedAt: new Date().toISOString() };
+      saveRuntime(organization); refresh();
+    });
+    $('#reopenPublicVoting')?.addEventListener('click', () => {
+      event.publicVoting.enabled = true;
+      event.publicVoting.award = null;
+      saveRuntime(organization); refresh();
+    });
+  }
+
   function renderPublic(organization, message = "") {
     const event = ensureEventData(organization.events[0]);
     const participant = currentParticipant(event);
@@ -2390,7 +2604,8 @@
     const alreadyVoted = localStorage.getItem(deviceKey) === "1";
     const votes = participant ? event.publicVotes.filter(item => item.participantId === participant.id) : [];
     const average = votes.length ? votes.reduce((sum, item) => sum + item.value, 0) / votes.length : null;
-    $("#moduleContent").innerHTML = `<div class="role-shell public-shell"><div class="role-top"><button class="button ghost station-back">← Postazioni</button><span class="public-brand">ScoreFlow Live</span></div>${participant ? `<article class="public-hero"><p class="eyebrow">In pedana</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span></article>${event.publicVoting.enabled ? `<article class="public-vote-card"><h3>Quanto ti è piaciuta l’esibizione?</h3><p>Il voto del pubblico è separato dal punteggio ufficiale della giuria.</p>${alreadyVoted ? `<div class="vote-thanks"><span>♥</span><strong>Voto registrato</strong><small>${votes.length} voti del pubblico · media ${average?.toFixed(1) || "—"}</small></div>` : `<form id="publicVoteForm"><div class="rating-buttons">${[1,2,3,4,5,6,7,8,9,10].map(value => `<button type="button" data-rating="${value}">${value}</button>`).join("")}</div><input id="publicRating" type="hidden" required><button class="button primary" type="submit">Invia voto</button></form>`}<div class="inline-message success">${escapeHtml(message)}</div></article>` : '<article class="public-vote-card"><h3>Voto pubblico non attivo</h3><p>La visualizzazione live resta disponibile.</p></article>'}` : '<article class="module-placeholder"><h2>In attesa del primo atleta</h2></article>'}</div>`;
+    $("#moduleContent").innerHTML = `<div class="role-shell public-shell"><div class="role-top"><button class="button ghost station-back">← Postazioni</button><span class="public-brand">ScoreFlow Live</span></div>${participant ? `<article class="public-hero"><p class="eyebrow">${participant.status === "completed" ? "Esibizione conclusa" : "In pedana"}</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span></article>${event.publicVoting.enabled ? `<article class="public-vote-card"><h3>Quanto ti è piaciuta l’esibizione?</h3><p>Il voto del pubblico è separato dal punteggio ufficiale della giuria.</p>${alreadyVoted ? `<div class="vote-thanks"><span>♥</span><strong>Voto registrato</strong><small>${votes.length} voti del pubblico · media ${average?.toFixed(1) || "—"}</small></div>` : `<form id="publicVoteForm"><div class="rating-buttons">${[1,2,3,4,5,6,7,8,9,10].map(value => `<button type="button" data-rating="${value}">${value}</button>`).join("")}</div><input id="publicRating" type="hidden" required><button class="button primary" type="submit">Invia voto</button></form>`}<div class="inline-message success">${escapeHtml(message)}</div></article>` : '<article class="public-vote-card"><h3>Voto pubblico non attivo</h3><p>La visualizzazione live resta disponibile.</p></article>'}` : '<article class="module-placeholder"><h2>In attesa del primo atleta</h2></article>'}${publicResultsHtml(event, !isRoleDevice(organization))}</div>`;
+    bindPublicAward(organization, () => renderPublic(organization));
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
     $$("[data-rating]", $("#moduleContent")).forEach(button => button.addEventListener("click", () => {
       $$("[data-rating]", $("#moduleContent")).forEach(item => item.classList.toggle("selected", item === button));
@@ -2399,7 +2614,8 @@
     if ($("#publicVoteForm")) $("#publicVoteForm").addEventListener("submit", submitEvent => {
       submitEvent.preventDefault();
       const value = Number($("#publicRating").value);
-      if (!value) return showToast("Seleziona un voto da 1 a 10.");
+      if (!Number.isFinite(value) || value < 1 || value > 10) return showToast("Seleziona un voto da 1 a 10.");
+      if (!event.publicVoting.enabled || event.publicVotes.some(v => v.participantId === participant.id && v.deviceId === publicDeviceId())) return renderPublic(organization);
       event.publicVotes.push({ id: uid("public"), participantId: participant.id, deviceId: publicDeviceId(), value, createdAt: new Date().toISOString() });
       localStorage.setItem(deviceKey, "1");
       saveRuntime(organization);
@@ -2573,7 +2789,8 @@
       if (!ranked.length) return "";
       return `<article class="dash-card results-card"><div class="section-heading"><div><p class="eyebrow">Categoria</p><h3>${escapeHtml(category.name)}</h3></div></div><div class="table-wrap"><table><thead><tr><th>Pos.</th><th>Atleta</th><th>Voti</th><th>Risultato</th><th>Stato</th><th>Scheda</th></tr></thead><tbody>${ranked.map((item, index) => `<tr><td><strong>${item.rank ?? "—"}</strong></td><td class="athlete-cell"><strong>${escapeHtml(item.participant.name)}</strong><small>${escapeHtml(item.participant.club || "")}</small></td><td>${item.result.count}/${event.scoring.minimumJudges}</td><td><strong>${item.result.total === null ? "—" : item.result.total.toFixed(2)}</strong></td><td><span class="state-badge ${item.result.complete ? "completed" : "registered"}">${item.result.complete ? "Valido" : "Provvisorio"}</span></td><td><button class="button mini athlete-report" data-participant="${item.participant.id}" ${item.result.count ? "" : "disabled"}>Apri scheda</button></td></tr>`).join("")}</tbody></table></div></article>`;
     }).join("");
-    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Classifiche · ${resultRound === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</p><h2>Risultati</h2><p>I risultati sono calcolati automaticamente secondo i criteri, i pesi e le penalità configurate.</p></div><button id="exportResultsBtn" class="button ghost">Esporta CSV</button></div><div class="results-list">${sections || '<article class="module-placeholder"><p>Nessun partecipante da classificare.</p></article>'}</div>`;
+    $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Classifiche · ${resultRound === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</p><h2>Risultati</h2><p>I risultati sono calcolati automaticamente secondo i criteri, i pesi e le penalità configurate.</p></div><button id="exportResultsBtn" class="button ghost">Esporta CSV</button></div><div class="results-list">${sections || '<article class="module-placeholder"><p>Nessun partecipante da classificare.</p></article>'}</div>${event.publicVoting.enabled || event.publicVotes.length || event.publicVoting.award ? publicResultsHtml(event, !isRoleDevice(organization)) : ""}`;
+    bindPublicAward(organization, () => renderResults(organization));
     $("#exportResultsBtn").addEventListener("click", () => {
       const rows = [["Categoria", "Posizione", "Atleta", "Società", "Voti", "Risultato"]];
       ScoreFlowRules.groups(event).forEach(category => { rankedCategory(event, category, resultRound).forEach((item, index) => rows.push([category.name, item.rank ?? "", item.participant.name, item.participant.club || "", item.result.count, item.result.total === null ? "" : item.result.total.toFixed(2)])); });
@@ -2631,7 +2848,7 @@
     const event=organization.events[0], locked=event.scores.length>0, draft=event.rules.proposal;
     const box=document.createElement('article');box.className='dash-card regulation-assistant';$('#moduleContent').appendChild(box);
     const input=(field,value,type='text',extra='')=>`<input data-reg-field="${field}" type="${type}" value="${escapeHtml(value??'')}" ${extra} ${locked?'disabled':''}>`;
-    box.innerHTML=`<h3>Configura la gara dal regolamento</h3><p>Carica il documento oppure incolla il testo. ScoreFlow riconosce alcune indicazioni esplicite e propone le impostazioni: verifica sempre il risultato prima di applicarlo.</p><p>Riconoscimento iniziale in italiano e inglese. Scansioni, tabelle complesse e clausole narrative richiedono verifica manuale. Nessuna configurazione viene applicata senza la tua conferma.</p>${event.rules.extractionWarning?`<p role="alert">${escapeHtml(event.rules.extractionWarning)}</p>`:''}
+    box.innerHTML=`<h3>Configura la gara dal regolamento</h3>${event.rules.reviewRequired?'<p class="warning-box" role="alert">Verifica obbligatoria: iscrizioni e votazione restano bloccate finché non approvi questa configurazione.</p>':''}<p>Carica il documento oppure incolla il testo. ScoreFlow riconosce alcune indicazioni esplicite e propone le impostazioni: verifica sempre il risultato prima di applicarlo.</p><p>Riconoscimento iniziale in italiano, inglese, francese e spagnolo. Scansioni, tabelle complesse e clausole narrative richiedono verifica manuale. Nessuna configurazione viene applicata senza la tua conferma.</p>${event.rules.extractionWarning?`<p role="alert">${escapeHtml(event.rules.extractionWarning)}</p>`:''}
     <div class="onboarding-actions"><button class="button primary" id="regPropose" ${locked?'disabled':''}>Prepara configurazione dal testo</button><label class="button ghost">Importa modello<input id="regImport" type="file" accept=".json" ${locked?'disabled':''}></label></div>
     ${locked?'<p>Regolamento bloccato: la gara contiene già voti. Usa un nuovo evento per una nuova versione.</p>':''}
     ${draft?`<form id="regReview"><h4>Verifica la proposta</h4><p>I valori non riconosciuti sono ripresi dalla configurazione attuale. Puoi correggere tutti i campi prima di applicarli.</p><label>Nome del modello${input('name',draft.name)}</label>
@@ -2658,7 +2875,7 @@
     box.querySelectorAll('[data-remove-criterion]').forEach(b=>b.onclick=()=>edit(d=>{const [removed]=d.criteria.splice(Number(b.dataset.removeCriterion),1);d.tieBreakIds=d.tieBreakIds.filter(id=>id!==removed.id);}));
     box.querySelectorAll('[data-remove-category]').forEach(b=>b.onclick=()=>edit(d=>d.categories.splice(Number(b.dataset.removeCategory),1)));
     box.querySelector('#regExport').onclick=()=>{try{const configuration=collect(),errors=ScoreFlowRegulations.validate(configuration);if(errors.length)throw Error(errors.join(' '));const url=URL.createObjectURL(new Blob([JSON.stringify({format:'scoreflow-regulation-v1',configuration:{...configuration,findings:[],unresolved:[],sourceText:undefined}},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='scoreflow-modello-regolamento.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){report(e);}};
-    box.querySelector('#regReview').onsubmit=e=>{e.preventDefault();try{const next=ScoreFlowRegulations.apply(event,collect(),{text:$('#competitionRules').value.trim(),file:event.rules.file,confirmed:box.querySelector('#regReviewed').checked});organization.events[0]=next;saveRuntime(organization);renderEventDashboard(organization,'Configurazione applicata. Versione del regolamento conservata.');}catch(e){report(e);}};
+    box.querySelector('#regReview').onsubmit=e=>{e.preventDefault();try{const next=ScoreFlowRegulations.apply(event,collect(),{text:$('#competitionRules').value.trim(),file:event.rules.file,confirmed:box.querySelector('#regReviewed').checked});organization.events[0]=next;saveRuntime(organization);renderEventDashboard(organization,'Configurazione applicata. Versione del regolamento conservata. Iscrizioni e votazione sono ora abilitate.');}catch(e){report(e);}};
   }
 
   function renderEventDashboard(organization, message = "") {
@@ -2672,7 +2889,7 @@
     renderRegulationAssistant(organization);
     $("#moduleContent").insertAdjacentHTML("beforeend", facRulesPanel(event));
     bindFacRules(organization);
-    $(".save-rules").addEventListener("click", () => { if(event.scores.length)return showToast('Regolamento bloccato dopo il primo voto.'); event.rules.text = $('#competitionRules').value.trim(); event.rules.proposal=null; saveRuntime(organization); renderEventDashboard(organization, "Regolamento salvato e reso disponibile alla regia."); });
+    $(".save-rules").addEventListener("click", () => { if(event.scores.length)return showToast('Regolamento bloccato dopo il primo voto.'); event.rules.text = $('#competitionRules').value.trim(); event.rules.proposal=event.rules.text?ScoreFlowRegulations.propose(event.rules.text,event):null; event.rules.reviewRequired=Boolean(event.rules.text); saveRuntime(organization); renderEventDashboard(organization, event.rules.text ? "Regolamento salvato. Verifica e approva la proposta prima di usare iscrizioni e votazione." : "Regolamento rimosso."); });
     if ($(".open-rules-file")) $(".open-rules-file").addEventListener("click", () => openManagedFile(organization, event.rules.file));
     $$(".open-event-asset", $("#moduleContent")).forEach(button => button.addEventListener("click", () => openManagedFile(organization, event.assets.find(item => item.id === button.dataset.assetId))));
     $("#rulesFile").addEventListener("change", async inputEvent => {
@@ -2688,12 +2905,12 @@
         const cloud = await uploadCloudFile(organization, file, "event-rules");
         const {extractedText,extractionWarning,...metadata}=cloud;
         event.rules.file = { name: file.name, size: file.size, type: file.type, blobKey, ...metadata, status: 'stored-in-cloud' };
-        event.rules.text=extractedText||'';event.rules.proposal=null;event.rules.extractionWarning=extractionWarning||null;
+        event.rules.text=extractedText||'';event.rules.proposal=event.rules.text?ScoreFlowRegulations.propose(event.rules.text,event):null;event.rules.reviewRequired=true;event.rules.extractionWarning=extractionWarning||null;
         saveRuntime(organization);
         renderEventDashboard(organization, "Regolamento salvato. Verifica il testo estratto e prepara la configurazione qui sotto.");
       } catch (error) {
         event.rules.file = { name: file.name, size: file.size, type: file.type, blobKey, status: 'stored-locally' };
-        event.rules.text='';event.rules.proposal=null;
+        event.rules.text='';event.rules.proposal=null;event.rules.reviewRequired=true;
         saveRuntime(organization);
         renderEventDashboard(organization, `PDF salvato solo su questo dispositivo: ${error.message}`);
       }
@@ -2808,6 +3025,17 @@
     renderEventFiles();
     event.target.value = "";
   });
+  $("#quickRulesFile").addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (!selectSetupRulesFile(file, "quick")) event.target.value = "";
+    if (file && $("#setupRulesFile")) {
+      $("#setupRulesFileState").textContent = $("#quickRulesStatus").textContent;
+    }
+  });
+  $("#setupRulesFile").addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (!selectSetupRulesFile(file)) event.target.value = "";
+  });
   $("#addCategoryBtn").addEventListener("click", () => {
     addCategory($("#newCategory").value);
     $("#newCategory").value = "";
@@ -2821,6 +3049,10 @@
   $("#newConfigBtn").addEventListener("click", () => {
     $("#quickOrgName").value = "";
     $("#quickEventName").value = "";
+    $("#quickRulesText").value = "";
+    $("#quickRulesFile").value = "";
+    selectedRulesFile = null;
+    $("#quickRulesStatus").textContent = "Potrai verificare ogni impostazione proposta prima che venga applicata.";
     showOnboarding();
   });
   $$('[data-demo-profile]').forEach(button => button.addEventListener("click", () => {
@@ -2832,7 +3064,11 @@
     $$('[data-demo-size]').forEach(item => item.classList.toggle("active", item === button));
   }));
   document.addEventListener("change", event => {
-    if (event.target.matches("[data-scoreflow-language]")) window.ScoreFlowI18n?.setLanguage(event.target.value);
+    if (event.target.matches("[data-scoreflow-language]")) {
+      const language = window.ScoreFlowI18n?.setLanguage(event.target.value) || event.target.value;
+      if ($("#language")) $("#language").value = language;
+      localStorage.setItem("scoreflow.uiLanguageChosen", "true");
+    }
   });
   $("#language").addEventListener("change", event => window.ScoreFlowI18n?.setLanguage(event.target.value));
   $("#publicVoting").addEventListener("change", event => {
@@ -2897,3 +3133,4 @@
 
   initializeApplication();
 })();
+

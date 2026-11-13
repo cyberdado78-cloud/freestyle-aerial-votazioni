@@ -29,3 +29,4 @@ begin
  if registered+manual > 6 then raise exception 'scoreflow:limit-athletes'; end if;
 end;
 $$;
+

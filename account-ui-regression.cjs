@@ -24,3 +24,4 @@ const cases=[
  ['logout clears account organizations and opens login',async()=>{await $('#accountLogout').onclick();assert.equal(w.qa.organization(),undefined);assert.match($('#accountScreen h1').textContent,/Accedi/);}]
 ];
 (async()=>{let failed=0;for(const[name,run]of cases){try{await run();console.log('PASS '+name);}catch(e){failed++;console.log('FAIL '+name+': '+e.stack);}}dom.window.close();console.log(JSON.stringify({passed:cases.length-failed,failed}));process.exitCode=failed?1:0;})();
+

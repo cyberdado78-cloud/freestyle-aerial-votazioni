@@ -30,7 +30,13 @@ const previous={events:[{...event,scores:[score]}]};const incoming=structuredClo
 // Exercise actual server role merge and athlete sanitization without a database.
 const server=fs.readFileSync('server.js','utf8');
 const stateFn=server.slice(server.indexOf('function stateAllowedForRole('),server.indexOf('\nconst accountTable'));
-const context={CompetitionRules:R,copyParticipantOperations:(a)=>a};vm.createContext(context);vm.runInContext(stateFn,context);
-const bad=structuredClone(previous);bad.events[0].scores=[{...score,id:'bad',penalty:99,note:'bad'}];assert.throws(()=>context.stateAllowedForRole(previous,bad,'judge'),/Penalità/);
-const good=structuredClone(previous);good.events[0].scores=[{...score,id:'good',penalty:1,note:'valid'}];assert.equal(context.stateAllowedForRole(previous,good,'judge').events[0].scores[0].penalty,1);
-console.log('FAC rules: scoring, ties, disciplines, age, duration, MP3, admission and server locks OK');
+const context={require,CompetitionRules:R,copyParticipantOperations:(a)=>a,accountFailure:(message,statusCode,error)=>Object.assign(new Error(message),{statusCode,error})};vm.createContext(context);vm.runInContext(stateFn,context);
+const current={events:[{...event,scores:[],judges:[{id:'j1',active:true}],participants:[{id:'p1',status:'competing',attempt:1,round:'qualification'}],control:{currentParticipantId:'p1'},scoring:{...event.scoring,penalties:{enabled:true,noteRequired:true}}}]};
+const candidate={...score,id:'new',judgeId:'j1',participantId:'p1',round:'qualification',attempt:1,submittedAt:'2026-11-13T09:00:00Z',penalty:1,note:'valid'};
+const bad=structuredClone(current);bad.events[0].scores=[{...candidate,penalty:99}];assert.throws(()=>context.stateAllowedForRole(current,bad,'judge',{judgeId:'j1'}),/Penalità/);
+const good=structuredClone(current);good.events[0].scores=[candidate];assert.equal(context.stateAllowedForRole(current,good,'judge',{judgeId:'j1'}).events[0].scores[0].penalty,1);
+assert.throws(()=>context.stateAllowedForRole(current,good,'judge'),/codice giudice/);
+assert.throws(()=>context.stateAllowedForRole(current,good,'judge',{judgeId:'j2'}),/soltanto il tuo voto/);
+const saved=context.stateAllowedForRole(current,good,'judge',{judgeId:'j1'});const edited=structuredClone(saved);edited.events[0].scores[0].penalty=2;
+assert.throws(()=>context.stateAllowedForRole(saved,edited,'judge',{judgeId:'j1'}),/non può essere modificato/);
+console.log('FAC rules: scoring, ties, disciplines, age, duration, MP3, admission, authenticated judge and immutable votes OK');

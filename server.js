@@ -566,7 +566,7 @@ function tenantFilesRoute(pathname) {
 }
 
 function tenantAccessRoute(pathname) {
-  const match = pathname.match(/^\/api\/tenants\/([a-z0-9-]{1,80})\/(access|device-state|public-qr)$/);
+  const match = pathname.match(/^\/api\/tenants\/([a-z0-9-]{1,80})\/(access|device-state|judge-auth|public-qr)$/);
   return match ? { tenantKey: match[1], action: match[2] } : null;
 }
 
@@ -635,16 +635,93 @@ function copyParticipantOperations(current = [], incoming = []) {
   });
 }
 
+// Role responses are projections, never an organizer-state dump.
+function deviceStateForRole(state, role) {
+  const pick = (value, keys) => Object.fromEntries(keys.filter(k => value?.[k] !== undefined).map(k => [k, value[k]]));
+  if (role !== 'public') {
+    const result = JSON.parse(JSON.stringify(state || {}));
+    if (role !== 'control') for (const event of result.events || []) for (const judge of event.judges || []) delete judge.code;
+    return result;
+  }
+  const result = pick(state, ['id','name','slug','language','createdAt','updatedAt']);
+  result.brand = pick(state.brand, ['primaryColor','accentColor','logoDataUrl','logoUrl']);
+  result.cloud = { tenantKey: state.cloud?.tenantKey || state.slug };
+  result.events = (state.events || []).map(event => {
+    const out = pick(event, ['id','name','location','startsAt','endsAt']);
+    out.categories = (event.categories || []).map(c => pick(c, ['id','name']));
+    out.participants = (event.participants || []).map(p => pick(p, ['id','name','club','discipline','categoryId','order','status','round','attempt']));
+    out.control = pick(event.control, ['currentParticipantId','status','round']);
+    out.judges = []; out.scores = []; out.scoreHistory = [];
+    out.publicVoting = pick(event.publicVoting, ['enabled']);
+    if (event.publicVoting?.award) out.publicVoting.award = pick(event.publicVoting.award, ['winnerIds','average','basis','awardedAt']);
+    const seenIds = new Set(), seenDevices = new Set(), participants = new Set(out.participants.map(p => p.id));
+    out.publicVotes = (event.publicVotes || []).filter(v => {
+      const key = `${v.participantId}:${v.deviceId}`;
+      if (!v.id || !v.deviceId || seenIds.has(v.id) || seenDevices.has(key) || !participants.has(v.participantId) || !Number.isFinite(v.value) || v.value < 1 || v.value > 10) return false;
+      seenIds.add(v.id); seenDevices.add(key); return true;
+    }).map(v => ({ ...pick(v, ['id','participantId','value','createdAt']), deviceId: `public-vote:${v.id}` }));
+    return out;
+  });
+  return result;
+}
+
+function judgeTicket(row, access, judge, expires = Date.now() + 8 * 3600000) {
+  const payload = Buffer.from(JSON.stringify({ access: access.id, judge: judge.id, expires })).toString('base64url');
+  const mac = crypto.createHmac('sha256', `${row.secret_hash}:${judge.code}`).update(payload).digest('hex');
+  return `${payload}.${mac}`;
+}
+
+function verifyJudgeTicket(request, row, access) {
+  try {
+    const ticket = String(request.headers['x-scoreflow-judge-ticket'] || '');
+    if (ticket.length > 2000) return null;
+    const [payload, signature, extra] = ticket.split('.');
+    if (extra || !/^[a-f0-9]{64}$/.test(signature || '')) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const event = stateFromRow(row.state_json).events?.find(e => e.id === access.event_id);
+    const judge = event?.judges?.find(j => j.id === data.judge && j.active);
+    if (!judge || data.access !== access.id || !Number.isFinite(data.expires) || data.expires <= Date.now() || data.expires > Date.now() + 8 * 3600000 + 1000) return null;
+    const expected = judgeTicket(row, access, judge, data.expires).split('.')[1];
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)) ? judge : null;
+  } catch (_) { return null; }
+}
+
 function stateAllowedForRole(currentState, incomingState, role, access = null) {
   const result = JSON.parse(JSON.stringify(currentState || {}));
   const currentEvent = result.events?.[0];
   const incomingEvent = incomingState?.events?.[0];
   if (!currentEvent || !incomingEvent) return result;
   if (role === 'judge') {
-    currentEvent.scores = Array.isArray(incomingEvent.scores) ? incomingEvent.scores : currentEvent.scores;
+    if (!access?.judgeId) throw accountFailure('Accedi nuovamente con il codice giudice.',428,'judge-auth-required');
+    const previous = Array.isArray(currentEvent.scores) ? currentEvent.scores : [];
+    const scoreKey = item => `${item.participantId}:${item.judgeId}:${item.round || 'qualification'}:${Number(item.attempt || 1)}`;
+    const ids = new Map(previous.map(item => [item.id, item])), keys = new Set(previous.map(scoreKey));
+    const additions = [];
+    for (const item of Array.isArray(incomingEvent.scores) ? incomingEvent.scores : []) {
+      if (ids.has(item.id)) {
+        if (!require('node:util').isDeepStrictEqual(item, ids.get(item.id))) throw accountFailure('Un voto già registrato non può essere modificato.',409,'score-locked');
+        continue;
+      }
+      if (keys.has(scoreKey(item))) throw accountFailure('Il voto è già registrato.',409,'score-locked');
+      if (item.judgeId !== access.judgeId) throw accountFailure('Puoi inviare soltanto il tuo voto.',403,'judge-mismatch');
+      const participant = currentEvent.participants?.find(p => p.id === item.participantId);
+      const judge = currentEvent.judges?.find(j => j.id === access.judgeId && j.active);
+      if (!judge || !participant || participant.id !== currentEvent.control?.currentParticipantId || !['ready','competing'].includes(participant.status) || (item.round || 'qualification') !== (participant.round || currentEvent.control?.round || 'qualification') || Number(item.attempt || 1) !== Number(participant.attempt || 1)) throw accountFailure('La scheda di voto non è più attiva.',409,'score-context-changed');
+      const criteria = currentEvent.scoring?.criteria || [];
+      if (!criteria.length || !item.values || criteria.some(c => typeof item.values[c.id] !== 'number' || !Number.isFinite(item.values[c.id]) || item.values[c.id] < Number(c.min) || item.values[c.id] > Number(c.max))) throw accountFailure('Valori di voto non validi.',400,'invalid-score');
+      if (typeof item.id !== 'string' || !item.id || item.id.length > 100 || typeof item.submittedAt !== 'string' || !Number.isFinite(Date.parse(item.submittedAt)) || typeof item.penalty !== 'number' || !Number.isFinite(item.penalty) || item.penalty < 0 || (!currentEvent.scoring?.penalties?.enabled && item.penalty !== 0)) throw accountFailure('Scheda di voto non valida.',400,'invalid-score');
+      const allowed = ['id','participantId','judgeId','round','attempt','values','penalty','note','penaltyNote','judgeNote','submittedAt','locked'];
+      const clean = Object.fromEntries(allowed.filter(k => item[k] !== undefined).map(k => [k, item[k]]));
+      clean.values = Object.fromEntries(criteria.map(c => [c.id,item.values[c.id]]));
+      clean.locked = true;
+      for (const key of ['note','penaltyNote','judgeNote']) if (clean[key] !== undefined && (typeof clean[key] !== 'string' || clean[key].length > 4000)) throw accountFailure('Nota non valida.',400,'invalid-score');
+      if (clean.penalty > 0 && currentEvent.scoring?.penalties?.noteRequired && !String(clean.penaltyNote || clean.note || '').trim()) throw accountFailure('Motivazione della penalità obbligatoria.',400,'invalid-score');
+      additions.push(clean); ids.set(clean.id, clean); keys.add(scoreKey(clean));
+    }
+    currentEvent.scores = [...previous, ...additions];
     const incomingJudges = new Map((incomingEvent.judges || []).map(item => [item.id, item]));
     currentEvent.judges = (currentEvent.judges || []).map(item => {
-      const incoming = incomingJudges.get(item.id);
+      const incoming = item.id === access.judgeId ? incomingJudges.get(item.id) : null;
       const language = ['it', 'en', 'fr', 'es'].includes(incoming?.language) ? incoming.language : item.language;
       return { ...item, language, lastActivityAt: incoming?.lastActivityAt || item.lastActivityAt };
     });
@@ -764,7 +841,7 @@ function safeAccountMutation(request) {
   if (origin && origin !== new URL(appOrigin).origin) throw accountFailure('Richiesta non consentita.',403);
   if (request.headers['sec-fetch-site']==='cross-site') throw accountFailure('Richiesta non consentita.',403);
 }
-function rateLimitAccount(request, email='', action='auth') {
+function rateLimitAccount(request, email='', action='auth', increment=true) {
   // Trust the direct peer only: spoofable forwarding headers must not disable the cap.
   const keys = [`ip:${request.socket.remoteAddress}:${action}`, ...(email ? [`email:${email}:${action}`] : [])];
   const now = Date.now();
@@ -772,7 +849,7 @@ function rateLimitAccount(request, email='', action='auth') {
   for(const key of keys) {
     let entry=authRates.get(key);
     if(!entry || entry.until<now) { entry={count:0,until:now+15*60000}; authRates.set(key,entry); }
-    if(++entry.count>(key.startsWith('ip:')?60:6)) throw accountFailure('Troppi tentativi. Riprova tra 15 minuti.',429,'rate-limited');
+    if(increment ? ++entry.count>(key.startsWith('ip:')?60:6) : entry.count>=(key.startsWith('ip:')?60:6)) throw accountFailure('Troppi tentativi. Riprova tra 15 minuti.',429,'rate-limited');
   }
 }
 async function sendAccountLink(email,type,password,requestedLanguage='it') {
@@ -856,14 +933,14 @@ async function handleApi(request, response, requestUrl) {
   if (await handleAccountApi(request,response,requestUrl)) return true;
   if (requestUrl.pathname === '/api/status' && request.method === 'GET') {
     if (!databaseConfigured) {
-      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.3.0' });
+      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.4.0' });
       return true;
     }
     try {
       const supabase = getSupabase();
       const { error } = await supabase.from(tenantTable).select('tenant_key').limit(1);
       if (error) throw databaseError(error);
-      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.3.0' });
+      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.4.0' });
     } catch (error) {
       console.error('Database status error', error);
       const details = error?.payload ? error : databaseError(error);
@@ -1249,8 +1326,15 @@ async function handleApi(request, response, requestUrl) {
   if (filesRoute && filesRoute.action === 'sign' && request.method === 'POST') {
     const auth = await authenticatedTenant(request, response, filesRoute.tenantKey, { allowAccess: true });
     if (!auth) return true;
+    if (auth.access?.role === 'public') throw accountFailure('File non disponibile alla postazione pubblica.',403,'file-access-denied');
     const body = await readJsonBody(request, 64 * 1024);
     const storagePath = String(body.path || '');
+    if (auth.access && ['judge','presenter'].includes(auth.access.role)) {
+      const row = await readTenant(auth.supabase, filesRoute.tenantKey);
+      const event = stateFromRow(row?.state_json).events?.find(e => e.id === auth.access.event_id);
+      const allowed = [event?.rules?.file?.cloudPath, ...(event?.participants || []).map(p => p.attachments?.entryVideo?.cloudPath)].filter(Boolean);
+      if (!allowed.includes(storagePath)) throw accountFailure('File non disponibile a questa postazione.',403,'file-access-denied');
+    }
     if (!storagePath.startsWith(`${filesRoute.tenantKey}/`) || storagePath.includes('..')) {
       sendJson(response, 400, { error: 'invalid-file-path' });
       return true;
@@ -1309,6 +1393,21 @@ async function handleApi(request, response, requestUrl) {
     return true;
   }
 
+  if (accessRoute && accessRoute.action === 'judge-auth' && request.method === 'POST') {
+    const auth = await authenticatedTenant(request, response, accessRoute.tenantKey, { allowAccess: true });
+    if (!auth) return true;
+    if (auth.access?.role !== 'judge') throw accountFailure('Postazione giudice richiesta.',403,'judge-role-required');
+    rateLimitAccount(request, `${accessRoute.tenantKey}:${auth.access.id}`, 'judge-auth', false);
+    const body = await readJsonBody(request, 4096);
+    const row = await readTenant(auth.supabase, accessRoute.tenantKey);
+    const event = stateFromRow(row?.state_json).events?.find(e => e.id === auth.access.event_id);
+    const code = String(body.code || '').trim();
+    const judge = code && event?.judges?.find(j => j.active && String(j.code) === code);
+    if (!judge) { rateLimitAccount(request, accessRoute.tenantKey + ':' + auth.access.id, 'judge-auth'); throw accountFailure('Codice non riconosciuto o giudice disattivato.',401,'invalid-judge-code'); }
+    sendJson(response,200,{judgeId:judge.id,ticket:judgeTicket(row,auth.access,judge)});
+    return true;
+  }
+
   if (accessRoute && accessRoute.action === 'device-state' && ['GET', 'PUT'].includes(request.method)) {
     const auth = await authenticatedTenant(request, response, accessRoute.tenantKey, { allowAccess: true });
     if (!auth) return true;
@@ -1318,8 +1417,15 @@ async function handleApi(request, response, requestUrl) {
       sendJson(response, 404, { error: 'tenant-not-found' });
       return true;
     }
+    const state = stateFromRow(row.state_json);
+    if (state.events?.[0]?.id !== auth.access.event_id) throw accountFailure('Collegamento non valido per questo evento.',403,'event-mismatch');
+    if (request.method === 'PUT' && auth.access.role === 'judge') {
+      const judge = verifyJudgeTicket(request, row, auth.access);
+      if (!judge) throw accountFailure('Accedi nuovamente con il codice giudice.',428,'judge-auth-required');
+      auth.access.judgeId = judge.id;
+    }
     if (request.method === 'GET') {
-      sendJson(response, 200, { tenantKey: accessRoute.tenantKey, role: auth.access.role, eventId: auth.access.event_id, revision: Number(row.revision), updatedAt: row.updated_at, state: stateFromRow(row.state_json), entitlements: await trialEntitlements(auth.supabase,accessRoute.tenantKey) });
+      sendJson(response, 200, { tenantKey: accessRoute.tenantKey, role: auth.access.role, eventId: auth.access.event_id, revision: Number(row.revision), updatedAt: row.updated_at, state: deviceStateForRole(stateFromRow(row.state_json), auth.access.role), entitlements: await trialEntitlements(auth.supabase,accessRoute.tenantKey) });
       return true;
     }
     const body = await readJsonBody(request);
@@ -1329,7 +1435,7 @@ async function handleApi(request, response, requestUrl) {
       return true;
     }
     if (expectedRevision !== Number(row.revision)) {
-      sendJson(response, 409, { error: 'revision-conflict', revision: Number(row.revision), updatedAt: row.updated_at, state: stateFromRow(row.state_json) });
+      sendJson(response, 409, { error: 'revision-conflict', revision: Number(row.revision), updatedAt: row.updated_at, state: deviceStateForRole(stateFromRow(row.state_json), auth.access.role) });
       return true;
     }
     const restrictedState = stateAllowedForRole(stateFromRow(row.state_json), body.state, auth.access.role, auth.access);
@@ -1343,7 +1449,7 @@ async function handleApi(request, response, requestUrl) {
     if (updateError) throw databaseError(updateError);
     if (!updated) {
       const latest = await readTenant(auth.supabase, accessRoute.tenantKey, 'state_json,revision,updated_at');
-      sendJson(response, 409, { error: 'revision-conflict', revision: Number(latest.revision), updatedAt: latest.updated_at, state: stateFromRow(latest.state_json) });
+      sendJson(response, 409, { error: 'revision-conflict', revision: Number(latest.revision), updatedAt: latest.updated_at, state: deviceStateForRole(stateFromRow(latest.state_json), auth.access.role) });
       return true;
     }
     sendJson(response, 200, { tenantKey: accessRoute.tenantKey, role: auth.access.role, revision: expectedRevision + 1 });
@@ -1477,7 +1583,7 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 200, {
       status: 'ok',
       service: 'scoreflow',
-      version: '3.3.0',
+      version: '3.4.0',
       email: databaseConfigured && managedEmailReady(), emailMode: 'managed-or-custom'
     });
     return;
@@ -1529,3 +1635,4 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`ScoreFlow disponibile sulla porta ${port}`);
   if (!databaseConfigured) console.log('Database ScoreFlow non configurato: modalità locale attiva.');
 });
+

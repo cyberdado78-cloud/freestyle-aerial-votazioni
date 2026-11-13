@@ -28,3 +28,4 @@ event.scores=[{}];w.document.querySelector('#moduleContent').innerHTML=w.testRul
 assert(w.document.querySelector('#facMode').disabled);
 assert(w.document.querySelector('[data-fac-category]').disabled);
 dom.window.close();console.log('FAC settings render and locked-state UI: OK');
+

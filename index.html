@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111827">
   <title>ScoreFlow — Il tuo evento, sotto controllo</title>
-  <link rel="stylesheet" href="./styles.css?v=eyes1-3.3.0-rules2">
+  <link rel="stylesheet" href="./styles.css?v=3.4.0-20261113">
 </head>
 <body>
   <a class="skip-link" href="#moduleContent">Vai al contenuto</a>
@@ -17,7 +17,7 @@
     </a>
     <div class="top-actions">
       <label class="language-picker"><span>Lingua</span><select data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label>
-      <span class="pill">Versione 3.3.0</span>
+      <span class="pill">Versione 3.4.0</span>
       <button class="button ghost" id="newConfigBtn" type="button">Nuova configurazione</button>
     </div>
   </header>
@@ -30,7 +30,16 @@ inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, ca
         <span class="onboarding-step">1ª configurazione</span>
       </div>
       <div class="onboarding-block">
-        <strong>1. Tipo di competizione</strong>
+        <strong>1. Lingua dell’ambiente</strong>
+        <div class="first-setup-language">
+          <label>Lingua di configurazione
+            <select id="firstSetupLanguage" data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select>
+          </label>
+          <p>La scelta si applica subito alla configurazione e diventa la lingua predefinita di account, iscrizioni e comunicazioni. Potrai cambiarla in seguito.</p>
+        </div>
+      </div>
+      <div class="onboarding-block">
+        <strong>2. Tipo di competizione</strong>
         <div class="choice-grid" id="demoProfileChoices">
           <button class="choice-card active" type="button" data-demo-profile="aerial"><span>◉</span><strong>Discipline aeree</strong><small>Tessuti, cerchio e performance</small></button>
           <button class="choice-card" type="button" data-demo-profile="dance"><span>◆</span><strong>Danza e spettacolo</strong><small>Tecnica, musicalità e presenza</small></button>
@@ -39,7 +48,7 @@ inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, ca
         </div>
       </div>
       <div class="onboarding-block">
-        <strong>2. Dimensione della prova</strong>
+        <strong>3. Dimensione della prova</strong>
         <div class="choice-grid compact" id="demoSizeChoices">
           <button class="choice-card" type="button" data-demo-size="compact"><strong>Rapida</strong><small>3 giudici · 6 atleti</small></button>
           <button class="choice-card active" type="button" data-demo-size="standard"><strong>Completa</strong><small>4 giudici · 12 atleti</small></button>
@@ -47,12 +56,21 @@ inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, ca
         </div>
       </div>
       <div class="onboarding-block">
-        <strong>3. Identità facoltativa</strong>
+        <strong>4. Identità facoltativa</strong>
         <div class="form-grid two onboarding-fields">
           <label>Nome organizzazione<input id="quickOrgName" placeholder="Lascia vuoto per un nome dimostrativo"></label>
           <label>Nome evento<input id="quickEventName" placeholder="Lascia vuoto per un evento dimostrativo"></label>
         </div>
         <p class="onboarding-note">Se non carichi un logo o non inserisci informazioni, verranno creati automaticamente valori coerenti con la scelta effettuata.</p>
+      </div>
+      <div class="onboarding-block regulation-first-run">
+        <strong>5. Regolamento del cliente</strong>
+        <p>Carica il regolamento oppure incolla il testo. ScoreFlow preparerà criteri, categorie, discipline, giudici, penalità e metodo di calcolo da verificare prima del primo voto.</p>
+        <div class="form-grid two onboarding-fields">
+          <label>Regolamento PDF o Word<input id="quickRulesFile" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><small>PDF o DOCX, massimo 10 MB.</small></label>
+          <label>Testo del regolamento<textarea id="quickRulesText" rows="4" placeholder="Incolla qui le clausole operative se non carichi un file"></textarea></label>
+        </div>
+        <div id="quickRulesStatus" class="inline-message" aria-live="polite">Potrai verificare ogni impostazione proposta prima che venga applicata.</div>
       </div>
       <div class="onboarding-actions">
         <button id="manualSetupBtn" class="button ghost" type="button">Configura con i miei dati</button>
@@ -121,6 +139,15 @@ inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, ca
             <label>Data iniziale<input id="eventStart" type="date" required></label>
             <label>Data finale<input id="eventEnd" type="date" required></label>
             <label class="wide">Discipline<input id="disciplines" required placeholder="Tessuti, Cerchio, Pole Dance"><small>Separale con una virgola.</small></label>
+            <div class="wide setup-rules-card">
+              <h3>Regolamento che guida la configurazione</h3>
+              <p>Il documento caricato viene estratto e trasformato in una proposta verificabile. Finché non approvi la proposta, iscrizioni e votazione restano bloccate.</p>
+              <div class="form-grid two">
+                <label>Carica PDF o Word<input id="setupRulesFile" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><small>PDF o DOCX, massimo 10 MB.</small></label>
+                <label>Testo del regolamento<textarea id="setupRulesText" rows="6" placeholder="Incolla il testo o aggiungi indicazioni leggibili al documento"></textarea></label>
+              </div>
+              <div id="setupRulesFileState" class="inline-message" aria-live="polite">Nessun regolamento selezionato.</div>
+            </div>
             <div class="wide category-editor">
               <label for="newCategory">Categorie</label>
               <div class="add-row"><input id="newCategory" placeholder="Nome nuova categoria"><button id="addCategoryBtn" class="button ghost" type="button">Aggiungi</button></div>
@@ -240,9 +267,10 @@ inizia qui.</h1><p>Scegli il tipo di evento e ScoreFlow prepara logo, colori, ca
     </div>
   </template>
 
-  <script src="./scripts/i18n.js?v=3.3.0-rules2-athlete-recovery2" defer></script>
-  <script src="./scripts/competition-rules.js?v=3.3.0-rules3" defer></script>
-  <script src="./scripts/regulation-import.js?v=3.3.0-rules2" defer></script>
-  <script src="./app.js?v=3.3.0-athlete-recovery2" defer></script>
+  <script src="./scripts/i18n.js?v=3.4.0-20261113" defer></script>
+  <script src="./scripts/competition-rules.js?v=3.4.0-20261113" defer></script>
+  <script src="./scripts/regulation-import.js?v=3.4.0-20261113" defer></script>
+  <script src="./app.js?v=3.4.0-20261113" defer></script>
 </body>
 </html>
+

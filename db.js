@@ -36,3 +36,4 @@ function getSupabase(secret = '', accessToken = '') {
 }
 
 module.exports = { databaseConfigured, getSupabase };
+

@@ -1,4 +1,30 @@
-# ScoreFlow 3.3.0 — Profilo regolamento FAC 2026
+# ScoreFlow 3.4.0 — Lingua al primo avvio e configurazione guidata dal regolamento
+
+Base: ScoreFlow 3.3.0, commit `64fb670` sul ramo `feat/fac-rules-2026`.
+
+## Novità
+
+- La lingua si sceglie come primo campo della prima configurazione. La scelta viene applicata immediatamente, sincronizzata con la lingua predefinita dell’organizzazione e usata da account, iscrizioni e comunicazioni.
+- Il primo avvio accetta il regolamento del cliente in PDF, DOCX o testo. Il documento viene archiviato, il testo estratto e trasformato in una proposta di criteri, categorie, discipline, numero di giudici, penalità, calcolo e spareggi.
+- Il riconoscimento delle clausole strutturate copre italiano, inglese, francese e spagnolo.
+- Nessuna proposta è applicata automaticamente: il cliente deve verificare e approvare. Iscrizioni e votazione restano bloccate mentre `rules.reviewRequired` è attivo.
+- L’approvazione crea una versione conservata del regolamento e sblocca le operazioni; dopo il primo voto le regole restano immutabili.
+- Il flusso di configurazione apre direttamente “Evento e regolamento” quando è necessaria una verifica.
+
+## Compatibilità e dati
+
+- Nessuna nuova tabella: lingua, documento, proposta, versione approvata e stato di verifica sono conservati nello stato JSON dell’organizzazione già sincronizzato con Supabase.
+- Endpoint salute e metadati applicativi aggiornati alla versione `3.4.0`.
+- Restano invariati QR pubblico opzionale, audit override append-only e protezione dal doppio voto.
+
+## Verifica
+
+- Aggiunto `first-run-regression.cjs`: ordine del selettore lingua, sincronizzazione IT/EN/FR/ES, presenza degli input regolamento, parsing francese/spagnolo, blocco pre-approvazione e sblocco dopo versionamento.
+- La suite completa comprende i controlli sintattici, account, trial, QR, audit override, profilo FAC e importazione regolamento.
+
+---
+
+## Storico 3.3.0 — Profilo regolamento FAC 2026
 
 Base: release 3.2.0 sul ramo fix/scoreflow-2.7-control-draft. La root del repository contiene ancora la versione 1.5: questo pacchetto completo è nella presente cartella e non sostituisce automaticamente la produzione.
 
@@ -67,6 +93,7 @@ Riproduzione locale: il controllo basato su JSON.stringify respinge oggetti iden
 Regressione aggiunta: secondo voto dopo riordino delle chiavi accettato; modifica reale al testo, al criterio, alla penalità, alla categoria o all’ordine di discipline/criteri respinta; voto fuori intervallo respinto. npm test superato. Cache del modulo regole aggiornata a rules3. Da distribuire su Hostinger e ripetere il collaudo prima di considerarlo risolto in produzione.
 
 Il PDF originale FAC al precedente URL pubblico restituisce 404. Il test ha usato il PDF sintetico del repository e poi testo esplicitamente marcato come collaudo, non il regolamento ufficiale.
+
 
 ## Athlete password recovery — 30 October 2026
 

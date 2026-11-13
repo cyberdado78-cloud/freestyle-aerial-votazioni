@@ -4,6 +4,7 @@ w.TextEncoder=TextEncoder;w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoVi
 let language='it',status=200;const requests=[];
 w.ScoreFlowI18n={observe:()=>{},translateDOM:()=>{},get language(){return language;},setLanguage:x=>language=x};
 w.fetch=async(url,options={})=>{requests.push({url,options});return{ok:status<400,status,text:async()=>JSON.stringify({message:status===401?'Email o password non corretti.':'OK'}),json:async()=>({message:status===401?'Email o password non corretti.':'OK'})};};
+w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
 w.eval(fs.readFileSync('app.js','utf8').replace('  initializeApplication();','  window.qa={renderAthletePortal,renderAthleteRecovery,showRegistrationPortal,initializeApplication,athleteAccessCopy};'));
 const config={tenantKey:'qa-owner',phase:'pre-registration',registration:{},event:{categories:[],disciplines:[]}},$=q=>w.document.querySelector(q),tick=()=>new Promise(r=>setImmediate(r));
 (async()=>{

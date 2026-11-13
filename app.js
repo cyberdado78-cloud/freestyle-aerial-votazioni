@@ -253,6 +253,7 @@
     targetEvent.scores = mergeCollection(localEvent.scores, remoteEvent.scores, score => `${score.participantId}:${score.judgeId}:${score.round || "qualification"}:${score.attempt || 1}`, "submittedAt");
     targetEvent.publicVotes = mergeCollection(localEvent.publicVotes, remoteEvent.publicVotes);
     targetEvent.scoreHistory = mergeCollection(localEvent.scoreHistory, remoteEvent.scoreHistory);
+    targetEvent.juryRequests = mergeCollection(localEvent.juryRequests, remoteEvent.juryRequests);
     base.id = local.id;
     base.cloud = { ...local.cloud };
     return base;
@@ -277,7 +278,7 @@
 
   function refreshSyncFeedback(organization) {
     updateConnectionStatus();
-    if (activeJudgeSession?.organizationId === organization.id && !$("#judgeScoreForm")) {
+    if (currentDashboardModule === "judge" && activeJudgeSession?.organizationId === organization.id && !$("#judgeScoreForm")) {
       renderJudgeStation(organization, activeJudgeSession.judgeId);
     }
   }
@@ -313,7 +314,8 @@
         if (!response.ok) throw Object.assign(new Error(result.message || "Sincronizzazione non disponibile"), {
           status: response.status, judgeAuthRequired: result.error === "judge-auth-required", trialRejected: response.status === 401 || response.status === 403 || response.status === 409
         });
-        const latest = platform.organizations.find(item => item.id === organization.id) || organization;
+        let latest = platform.organizations.find(item => item.id === organization.id) || organization;
+        if(result.state){const merged=mergeCloudOrganization(latest,result.state);const i=platform.organizations.findIndex(o=>o.id===latest.id);if(i>=0)platform.organizations[i]=merged;latest=merged;}
         cloud = latest.cloud;
         cloud.revision = Number(result.revision);
         cloud.pending = (Number(cloud.pendingVersion) || 0) !== version;
@@ -460,6 +462,7 @@
     event.publicVoting.qrEnabled = Boolean(event.publicVoting.qrEnabled);
     event.resultsValidated = event.resultsValidated || {};
     event.scoreHistory = Array.isArray(event.scoreHistory) ? event.scoreHistory : [];
+    ScoreFlowJury.ensure(event);
     event.roundHistory = Array.isArray(event.roundHistory) ? event.roundHistory : [];
     event.notifications = Array.isArray(event.notifications) ? event.notifications : [];
     event.rules = event.rules || { text: "", file: null };
@@ -920,6 +923,7 @@
         judges: existing?.events?.[0]?.judges || [],
         scores: existing?.events?.[0]?.scores || [],
         scoreHistory: existing?.events?.[0]?.scoreHistory || [],
+        juryRequests: existing?.events?.[0]?.juryRequests || [],
         roundHistory: existing?.events?.[0]?.roundHistory || [],
         notifications: existing?.events?.[0]?.notifications || [],
         presenter: existing?.events?.[0]?.presenter || { selectedParticipantId: null, notes: {} },
@@ -1249,7 +1253,7 @@
     const event = ensureEventData(organization.events[0]);
     const confirmation = prompt("Il reset cancella voti, risultati, cronologia, ripetizioni e stati della prova. Configurazione, roster e giudici restano invariati. Scrivi RESET per continuare.");
     if (confirmation !== "RESET") return;
-    event.scores = []; event.publicVotes = []; event.scoreHistory = []; event.roundHistory = []; event.notifications = []; event.resultsValidated = {};
+    event.scores = []; event.publicVotes = []; event.scoreHistory = []; event.juryRequests = []; event.roundHistory = []; event.notifications = []; event.resultsValidated = {};
     event.presenter = { selectedParticipantId: null, notes: {} };
     event.participants.forEach((participant, index) => { participant.order = index + 1; participant.status = "registered"; participant.round = "qualification"; participant.attempt = 1; participant.updatedAt = new Date().toISOString(); });
     event.judges.forEach(judge => { judge.lastActivityAt = null; });
@@ -2173,8 +2177,10 @@
     if (event.scoring.aggregation === "sum") total = values.reduce((sum, value) => sum + value, 0);
     else if (event.scoring.aggregation === "median") { const sorted = [...values].sort((a, b) => a - b); const middle = Math.floor(sorted.length / 2); total = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2; }
     else total = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const grossTotal=total, finalPenalty=ScoreFlowJury.finalPenalty(scores);
+    total=Math.max(0,total-finalPenalty);
     const criterionMeans = Object.fromEntries(event.scoring.criteria.map(c => [c.id, scores.reduce((sum, s) => sum + Number(s.values?.[c.id] || 0), 0) / scores.length]));
-    return { total, criterionMeans, count: values.length, complete: values.length >= event.scoring.minimumJudges };
+    return { total, grossTotal, finalPenalty, criterionMeans, count: values.length, complete: values.length >= event.scoring.minimumJudges };
   }
 
   function participantRoundResult(event, participantId, round) {
@@ -2233,6 +2239,7 @@
     if (oldScores.length) event.scoreHistory.push(...oldScores.map(score => ({ ...score, invalidatedAt: new Date().toISOString(), invalidationReason: "Ripetizione autorizzata dalla regia" })));
     const oldIds = new Set(oldScores.map(item => item.id));
     event.scores = event.scores.filter(item => !oldIds.has(item.id));
+    ScoreFlowJury.expireMissingSources(event);
     participant.attempt = Number(participant.attempt || 1) + 1;
     participant.status = "repeat";
     if (!event.control.repeatQueue.some(item => (typeof item === "string" ? item : item.participantId) === participant.id)) event.control.repeatQueue.push({ participantId: participant.id, afterCategoryId });
@@ -2256,6 +2263,7 @@
 
   function saveScoreFromForm(event, organization, participant, judge, root, onSaved, options = {}) {
     const penalty = Number($("#scorePenalty", root)?.value || 0);
+    const penaltyScope = $("#scorePenaltyScope", root)?.value || "judge";
     const penaltyNote = $("#scoreNote", root)?.value.trim() || "";
     const judgeNote = $("#judgeOptionalNote", root)?.value.trim() || "";
     const overrideReason = $("#overrideReason", root)?.value.trim() || "";
@@ -2263,12 +2271,14 @@
     if (penalty > 0 && event.scoring.penalties.noteRequired && !penaltyNote) return { ok: false, error: "Inserisci la motivazione della penalità." };
     const values = {};
     $$(".score-value", root).forEach(input => { values[input.dataset.criterion] = Number(input.value); });
-    const score = { id: uid("score"), participantId: participant.id, judgeId: judge.id, round: participant.round || activeRound(event), attempt: participant.attempt || 1, values, penalty, note: penaltyNote, penaltyNote, judgeNote, submittedAt: new Date().toISOString(), locked: true };
+    const score = { id: uid("score"), participantId: participant.id, judgeId: judge.id, round: participant.round || activeRound(event), attempt: participant.attempt || 1, values, penalty, penaltyScope, note: penaltyNote, penaltyNote, judgeNote, ...(options.review?{reviewRequestId:options.review.id}:{}), submittedAt: new Date().toISOString(), locked: true };
     const ruleErrors = ScoreFlowRules.scoreErrors(event, score);
     if (ruleErrors.length) return { ok: false, error: ruleErrors.join(" ") };
     const existingIndex = event.scores.findIndex(item => item.participantId === participant.id && item.judgeId === judge.id && (item.round || "qualification") === score.round && Number(item.attempt || 1) === score.attempt);
     if (existingIndex >= 0) {
       const original = event.scores[existingIndex];
+      if(!options.override&&!options.review)return {ok:false,error:"Richiedi prima lo sblocco alla regia."};
+      if(options.review){if(!ScoreFlowJury.approval(event,score,original))return {ok:false,error:"Autorizzazione assente, scaduta o già utilizzata."};ScoreFlowJury.consume(event,options.review,original,score,{role:"judge",judgeId:judge.id});}
       if (options.override) {
         score.replacesScoreId = original.id;
         event.scoreHistory.push({
@@ -2292,10 +2302,60 @@
       }
       event.scores.push(score);
     }
+    ScoreFlowJury.categoryRequest(event,score);
+    event.resultsValidated={};
     judge.lastActivityAt = score.submittedAt;
     saveRuntime(organization);
     onSaved();
     return { ok: true };
+  }
+
+  const juryCopy = {
+    it:{browse:'Rivedi atleta / video entry',live:'Torna all’atleta in pedana',reason:'Motivo della richiesta',ring:'🔔 Richiedi ri-votazione alla regia',pending:'Richiesta inviata: in attesa della regia',approved:'Ri-votazione autorizzata per 30 minuti. Il voto precedente resta valido fino al nuovo invio.',rejected:'Richiesta respinta dalla regia',consumed:'Ri-votazione completata e archiviata',expired:'Autorizzazione scaduta: puoi inviare una nuova richiesta',penalty:'Punti di penalità',scope:'Tipo di penalità',ordinary:'Ordinaria · sul voto del giudice',heavy:'Pesante · sul risultato finale',penaltyReason:'Motivazione obbligatoria',rule:'La penalità pesante si sottrae dopo il calcolo finale, senza dividere per i giudici. Più segnalazioni sulla stessa esibizione non si sommano: vale la più alta.',bell:'🔔 Richieste della giuria',approve:'Sblocca questo voto',reject:'Respingi / revoca',keep:'Mantieni categoria e penalità',move:'Cambia categoria e conserva penalità',category:'Categoria proposta',decision:'Motivazione della decisione',review:'Ri-votazione',categoryReview:'Verifica categoria per penalità pesante',noRequests:'Nessuna richiesta in attesa',old:'Voto precedente conservato nello storico',closed:'Richieste concluse',newRequests:'Nuova richiesta di un giudice alla regia',points:'Penalità pesante sul totale',ack:'Invio in corso: attendi la conferma cloud',select:'Seleziona categoria'},
+    en:{browse:'Review athlete / entry video',live:'Back to live athlete',reason:'Request reason',ring:'🔔 Request control desk to reopen my score',pending:'Request sent: awaiting control desk',approved:'Re-scoring authorised for 30 minutes. The previous score remains valid until submission.',rejected:'Request rejected by control desk',consumed:'Re-scoring completed and archived',expired:'Approval expired: you may send a new request',penalty:'Penalty points',scope:'Penalty type',ordinary:'Ordinary · judge score',heavy:'Heavy · final result',penaltyReason:'Required reason',rule:'The heavy penalty is deducted after aggregation, without dividing by judges. Multiple reports on the same performance are not added: the highest applies.',bell:'🔔 Jury requests',approve:'Reopen this score',reject:'Reject / revoke',keep:'Keep category and penalty',move:'Change category, retain penalty',category:'Suggested category',decision:'Decision reason',review:'Re-scoring',categoryReview:'Category review for heavy penalty',noRequests:'No pending requests',old:'Previous score retained in history',closed:'Completed requests',newRequests:'New jury request to control desk',points:'Heavy penalty on final result',ack:'Sending: wait for cloud confirmation',select:'Select category'},
+    fr:{browse:'Revoir athlète / vidéo d’entrée',live:'Retour à l’athlète en piste',reason:'Motif de la demande',ring:'🔔 Demander une nouvelle notation à la régie',pending:'Demande envoyée : en attente de la régie',approved:'Nouvelle notation autorisée pendant 30 minutes. La note précédente reste valable jusqu’à l’envoi.',rejected:'Demande refusée par la régie',consumed:'Nouvelle notation terminée et archivée',expired:'Autorisation expirée : envoyez une nouvelle demande',penalty:'Points de pénalité',scope:'Type de pénalité',ordinary:'Ordinaire · note du juge',heavy:'Lourde · résultat final',penaltyReason:'Motif obligatoire',rule:'La pénalité lourde est déduite après le calcul final, sans division entre juges. Les signalements ne se cumulent pas : la pénalité la plus élevée s’applique.',bell:'🔔 Demandes du jury',approve:'Déverrouiller cette note',reject:'Refuser / révoquer',keep:'Conserver catégorie et pénalité',move:'Changer de catégorie, conserver la pénalité',category:'Catégorie proposée',decision:'Motif de la décision',review:'Nouvelle notation',categoryReview:'Vérification de catégorie pour pénalité lourde',noRequests:'Aucune demande en attente',old:'Note précédente conservée dans l’historique',closed:'Demandes terminées',newRequests:'Nouvelle demande du jury à la régie',points:'Pénalité lourde sur le résultat final',ack:'Envoi en cours : attendez la confirmation',select:'Choisir une catégorie'},
+    es:{browse:'Revisar atleta / vídeo de entrada',live:'Volver al atleta en pista',reason:'Motivo de la solicitud',ring:'🔔 Solicitar nueva votación a la regia',pending:'Solicitud enviada: esperando a la regia',approved:'Nueva votación autorizada durante 30 minutos. El voto anterior sigue válido hasta el envío.',rejected:'Solicitud rechazada por la regia',consumed:'Nueva votación completada y archivada',expired:'Autorización caducada: puedes enviar otra solicitud',penalty:'Puntos de penalización',scope:'Tipo de penalización',ordinary:'Ordinaria · voto del juez',heavy:'Grave · resultado final',penaltyReason:'Motivo obligatorio',rule:'La penalización grave se resta después del cálculo final, sin dividir entre jueces. Las solicitudes no se suman: se aplica la penalización más alta.',bell:'🔔 Solicitudes del jurado',approve:'Desbloquear este voto',reject:'Rechazar / revocar',keep:'Mantener categoría y penalización',move:'Cambiar categoría y conservar penalización',category:'Categoría propuesta',decision:'Motivo de la decisión',review:'Nueva votación',categoryReview:'Revisión de categoría por penalización grave',noRequests:'No hay solicitudes pendientes',old:'Voto anterior conservado en el historial',closed:'Solicitudes completadas',newRequests:'Nueva solicitud del jurado a la regia',points:'Penalización grave sobre el resultado final',ack:'Enviando: espera la confirmación',select:'Seleccionar categoría'}
+  };
+  for(const [language,labels] of Object.entries({it:['Schede inviate','Scheda attuale'],en:['Submitted sheets','Current sheet'],fr:['Fiches envoyées','Fiche actuelle'],es:['Fichas enviadas','Ficha actual']})){juryCopy[language].scoringHistory=labels[0];juryCopy[language].currentSheet=labels[1];}
+  function juryPenaltyFields(score=null,language='it'){
+    const t=juryCopy[language]||juryCopy.it;
+    return `<div class="penalty-panel jury-penalty"><label>${t.scope}<select id="scorePenaltyScope"><option value="judge" ${score?.penaltyScope!=='final'?'selected':''}>${t.ordinary}</option><option value="final" ${score?.penaltyScope==='final'?'selected':''}>${t.heavy}</option></select></label><label>${t.penalty}<input id="scorePenalty" type="number" min="0" max="100000" step="0.1" value="${Number(score?.penalty)||0}"></label><label>${t.penaltyReason}<input id="scoreNote" maxlength="1200" value="${escapeHtml(score?.penaltyNote||score?.note||'')}"></label><p class="jury-explanation">${t.rule}</p></div>`;
+  }
+  function renderJuryJudgeTools(organization,judge,participant,score,approval,language){
+    const event=ensureEventData(organization.events[0]),t=juryCopy[language]||juryCopy.it;
+    const shell=$('.judge-shell');
+    const browser=document.createElement('article');browser.className='dash-card jury-archive';
+    browser.innerHTML=`<label>${t.browse}<select id="judgeArchiveAthlete">${event.participants.slice().sort((a,b)=>a.order-b.order).map(p=>`<option value="${escapeHtml(p.id)}" ${p.id===participant.id?'selected':''}>${escapeHtml(p.name)} · ${escapeHtml(categoryName(event,p.categoryId))}</option>`).join('')}</select></label><button class="button ghost" id="judgeBackToLive">${t.live}</button>`;
+    const ownScores=event.scores.filter(s=>s.participantId===participant.id&&s.judgeId===judge.id);
+    if(ownScores.length)browser.insertAdjacentHTML('beforeend',`<label>${t.scoringHistory||t.review}<select id="judgeArchiveScore"><option value="">${t.currentSheet||t.live}</option>${ownScores.map(s=>`<option value="${escapeHtml(s.id)}" ${activeJudgeSession.scoreId===s.id?'selected':''}>${escapeHtml(s.round||'qualification')} · ${Number(s.attempt||1)} · ${new Date(s.submittedAt).toLocaleString(localeForLanguage(language))}</option>`).join('')}</select></label>`);
+    shell.querySelector('.role-top').after(browser);
+    $('#judgeArchiveScore')?.addEventListener('change',e=>{activeJudgeSession.scoreId=e.target.value;renderJudgeStation(organization,judge.id);});
+    $('#judgeArchiveAthlete').onchange=e=>{activeJudgeSession.participantId=e.target.value;activeJudgeSession.scoreId=null;renderJudgeStation(organization,judge.id);};
+    $('#judgeBackToLive').onclick=()=>{activeJudgeSession.participantId=null;activeJudgeSession.scoreId=null;renderJudgeStation(organization,judge.id);};
+    if(!score)return;
+    const requests=event.juryRequests.filter(r=>r.kind==='score-review'&&r.sourceScoreId===score.id),last=requests[requests.length-1];
+    const waiting=last?.status==='pending'||approval||organization.cloud?.pending;
+    const box=document.createElement('article');box.className='dash-card jury-request-card';
+    const expired=last?.status==='approved'&&!approval;
+    box.innerHTML=`<h3>${t.review}</h3>${organization.cloud?.pending?`<p role="status">${t.ack}</p>`:""}${last?`<p role="status">${escapeHtml(expired?t.expired:t[last.status]||last.status)}</p>`:''}${approval?'':waiting?'':`<form id="judgeReviewRequest"><label>${t.reason}<textarea id="judgeReviewReason" maxlength="1200" required rows="2"></textarea></label><button class="button warning" type="submit">${t.ring}</button></form>`}`;
+    shell.append(box);
+    $('#judgeReviewRequest')?.addEventListener('submit',e=>{e.preventDefault();try{ScoreFlowJury.addRequest(event,{id:uid('jury'),kind:'score-review',sourceScoreId:score.id,reason:$('#judgeReviewReason').value},judge.id);saveRuntime(organization);renderJudgeStation(organization,judge.id);}catch(error){showToast(error.message);}});
+    if(approval)$('#judgeScoreForm')?.insertAdjacentHTML('afterbegin',`<p class="warning-box" role="status">${t.approved}</p>`);
+  }
+  function renderJuryControl(organization){
+    const event=ensureEventData(organization.events[0]),t=juryCopy[uiLanguage()]||juryCopy.it;
+    const pending=event.juryRequests.filter(r=>r.status==='pending'||(r.status==='approved'&&Date.parse(r.expiresAt)>Date.now()));
+    const panel=document.createElement('section');panel.className='dash-card jury-control';panel.setAttribute('aria-label',t.bell);
+    panel.innerHTML=`<h3 aria-live="polite">${t.bell} <span class="jury-count">${pending.length}</span></h3>${!pending.length?`<p>${t.noRequests}</p>`:''}${pending.map(r=>{
+      const p=event.participants.find(p=>p.id===r.participantId),j=event.judges.find(j=>j.id===r.judgeId),score=event.scores.find(s=>s.id===r.sourceScoreId);
+      return `<article class="jury-inbox" data-jury-id="${escapeHtml(r.id)}"><h4>${escapeHtml(p?.name||'Atleta')} · ${escapeHtml(j?.name||'Giudice')}</h4><strong>${r.kind==='category-review'?t.categoryReview:t.review}</strong><p>${escapeHtml(r.reason)}</p>${score?.penaltyScope==='final'?`<p>${t.points}: <strong>−${Number(score.penalty).toFixed(2)}</strong></p>`:''}<label>${t.decision}<input data-jury-reason maxlength="1200"></label>${r.kind==='category-review'?`<label>${t.category}<select data-jury-category><option value="">${t.select}</option>${event.categories.filter(c=>c.id!==p?.categoryId).map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('')}</select></label><div class="jury-actions"><button class="button ghost" data-jury-action="kept">${t.keep}</button><button class="button warning" data-jury-action="reclassified">${t.move}</button></div>`:`<p>${r.status==='approved'?t.approved:t.pending}</p><div class="jury-actions">${r.status==='pending'?`<button class="button primary" data-jury-action="approved">${t.approve}</button>`:''}<button class="button ghost" data-jury-action="rejected">${t.reject}</button></div>`}</article>`;
+    }).join('')}<details><summary>${t.closed} (${event.juryRequests.length-pending.length})</summary>${event.juryRequests.filter(r=>!pending.includes(r)).slice(-15).reverse().map(r=>`<p>${escapeHtml(event.participants.find(p=>p.id===r.participantId)?.name||'Atleta')} · ${escapeHtml(t[r.status]||({kept:t.keep,reclassified:t.move,superseded:t.old})[r.status]||r.status)} · ${escapeHtml(r.reason)}</p>`).join('')}</details>`;
+    $('#moduleContent').prepend(panel);
+    panel.querySelectorAll('[data-jury-action]').forEach(button=>button.onclick=()=>{const card=button.closest('[data-jury-id]');try{ScoreFlowJury.decide(event,card.dataset.juryId,button.dataset.juryAction,{reason:card.querySelector('[data-jury-reason]').value,categoryId:card.querySelector('[data-jury-category]')?.value,actor:{role:'control',email:organizerAccount?.email||'regia'}});saveRuntime(organization);renderControlPreservingDraft(organization);}catch(error){showToast(error.message);}});
+    const signature=pending.filter(r=>r.status==='pending').map(r=>r.id).sort().join(',');
+    const notificationKey='scoreflow.juryBell.'+organization.id;
+    if(signature&&sessionStorage.getItem(notificationKey)!==signature)showToast(t.newRequests);
+    sessionStorage.setItem(notificationKey,signature);
   }
 
   const judgeTranslations = {
@@ -2457,16 +2517,21 @@
     }
     const judge = activeJudges.find(item => item.id === judgeId);
     if (!judge) return renderJudgeStation(organization);
-    activeJudgeSession = { organizationId: organization.id, judgeId: judge.id };
+    const viewedScoreId=activeJudgeSession?.organizationId===organization.id&&activeJudgeSession.judgeId===judge.id?activeJudgeSession.scoreId:null;
+    const viewedId=activeJudgeSession?.organizationId===organization.id&&activeJudgeSession.judgeId===judge.id?activeJudgeSession.participantId:null;
+    activeJudgeSession = { organizationId: organization.id, judgeId: judge.id, participantId:viewedId,scoreId:viewedScoreId };
     const language = judgeTranslations[judge.language] ? judge.language : "it";
     const t = judgeTranslations[language];
-    const participant = currentParticipant(event);
+    const actualParticipant = event.participants.find(p=>p.id===viewedId) || currentParticipant(event);
+    const viewedScore=event.scores.find(s=>s.id===viewedScoreId&&s.judgeId===judge.id&&s.participantId===actualParticipant?.id);
+    const participant=viewedScore?{...actualParticipant,round:viewedScore.round,attempt:viewedScore.attempt}:actualParticipant;
     if (!participant) {
       $("#moduleContent").innerHTML = '<article class="module-placeholder"><h2>Nessun atleta</h2><p>La regia deve prima caricare i partecipanti.</p></article>';
       return;
     }
     const existingScore = participantScores(event, participant).find(item => item.judgeId === judge.id);
-    const pendingScore = existingScore && (organization.cloud?.pending || organization.cloud?.status === "offline");
+    const review=existingScore&&(event.juryRequests||[]).find(r=>ScoreFlowJury.approval(event,{...existingScore,reviewRequestId:r.id},existingScore));
+    const pendingScore = existingScore && !review && (organization.cloud?.pending || organization.cloud?.status === "offline");
     const pendingCopy = {
       it: ["Voto salvato sul dispositivo", "In attesa della conferma della regia. Non chiudere questa scheda: l’invio sarà ritentato automaticamente."],
       en: ["Score saved on this device", "Waiting for control desk confirmation. Keep this tab open: submission will retry automatically."],
@@ -2474,17 +2539,18 @@
       es: ["Voto guardado en este dispositivo", "Esperando confirmación de la mesa de control. Mantén esta pestaña abierta: el envío se reintentará automáticamente."]
     }[language];
     const sentTitle = pendingScore ? pendingCopy[0] : t.sent;
-    const sentText = pendingScore ? pendingCopy[1] : t.sentText;
-    const locked = !["ready", "competing"].includes(participant.status);
+    const sentText = review ? (juryCopy[language]||juryCopy.it).approved : pendingScore ? pendingCopy[1] : t.sentText;
+    const locked = !review&&(!["ready", "competing"].includes(participant.status)||participant.id!==currentParticipant(event)?.id);
     const entryVideo = participant.attachments?.entryVideo;
     const rulesText = event.rules.text || "Nessun testo del regolamento disponibile.";
     $("#moduleContent").innerHTML = `<div class="role-shell judge-shell"><div class="role-top"><div><button class="button ghost station-back">← ${t.back}</button><button class="button ghost judge-logout">${t.change}</button></div><div class="judge-tools"><label>Language<select id="judgeUiLanguage"><option value="it" ${language === "it" ? "selected" : ""}>Italiano</option><option value="en" ${language === "en" ? "selected" : ""}>English</option><option value="fr" ${language === "fr" ? "selected" : ""}>Français</option><option value="es" ${language === "es" ? "selected" : ""}>Español</option></select></label><div class="judge-identity"><span>Giudice</span><strong>${escapeHtml(judge.name)}</strong></div></div></div>
       <article class="role-athlete judge-athlete-card"><div class="judge-athlete-photo">${participant.photoDataUrl ? `<img src="${participant.photoDataUrl}" alt="${escapeHtml(participant.name)}">` : `<span>${escapeHtml(participant.name.charAt(0) || "A")}</span>`}</div><div><p class="eyebrow">${t.athlete}</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span><p class="athlete-description">${escapeHtml(participant.description || "Descrizione atleta non presente.")}</p></div><span class="state-badge ${participant.status}">${locked ? t.waiting : participant.status === "competing" ? "Live" : "Ready"}</span></article>
       <div class="judge-info-grid"><article class="dash-card choreography-card"><span>Titolo</span><strong>${escapeHtml(participant.choreographyTitle || t.noTitle)}</strong><span>Tema</span><p>${escapeHtml(participant.choreographyTheme || t.noTheme)}</p>${entryVideo?.blobKey || entryVideo?.cloudPath ? `<button class="button ghost judge-entry-video">▶ ${t.video}</button>` : '<small>Video entry non caricato</small>'}</article><article class="dash-card judge-rules"><div class="section-heading"><div><h3>${t.rules}</h3><p class="muted">PDF e testo consultabile senza uscire dalla votazione.</p></div>${event.rules.file?.blobKey || event.rules.file?.cloudPath ? `<button class="button mini open-judge-rules">Apri regolamento</button>` : ""}</div><label>${t.search}<input id="judgeRulesSearch" type="search" placeholder="${t.search}..."></label><div id="judgeRulesResult" class="rules-search-result">${escapeHtml(rulesText)}</div></article></div>
       <article class="dash-card judge-score-card"><div class="section-heading"><div><h3>${t.scoring}</h3><p class="muted">${existingScore ? sentText : t.instruction}</p></div></div>
-      ${existingScore ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${sentTitle}</strong><p>${sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event)}</div>${event.scoring.penalties.enabled ? `<div class="penalty-panel"><label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="0"></label><label>Motivazione penalità<input id="scoreNote" placeholder="Richiesta solo se applichi una penalità"></label></div>` : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}"></textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
+      ${existingScore&&!review ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${sentTitle}</strong><p>${sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event,review?existingScore:null)}</div>${event.scoring.penalties.enabled ? juryPenaltyFields(review?existingScore:null,language) : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}">${escapeHtml(review?existingScore?.judgeNote||"":"")}</textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
       <div id="judgeVoteFeedback" class="feedback-banner ${message && !pendingScore ? "success" : "hidden"}"><span>✓</span><div><strong>${t.sent}</strong><p>${escapeHtml(message)}</p></div></div></article></div>`;
-    $("#judgeScoreForm")?.setAttribute("data-score-context", controlScoreContext(organization, judge.id));
+    renderJuryJudgeTools(organization,judge,participant,existingScore,review,language);
+    $("#judgeScoreForm")?.setAttribute("data-score-context",JSON.stringify([organization.id,participant.id,participant.round,participant.attempt,judge.id,review?.id||null]));
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
     $(".judge-logout").addEventListener("click", () => { delete organization.cloud?.judgeTicket; if (!organization.cloud?.pending) delete organization.cloud?.judgeId; persistPlatform(); renderJudgeStation(organization); });
     $("#judgeUiLanguage").addEventListener("change", changeEvent => { judge.language = changeEvent.target.value; saveRuntime(organization); renderJudgeStation(organization, judge.id); });
@@ -2500,8 +2566,8 @@
     });
     if ($("#judgeScoreForm")) $("#judgeScoreForm").addEventListener("submit", submitEvent => {
       submitEvent.preventDefault();
-      if (participantScores(event, participant).some(item => item.judgeId === judge.id)) return renderJudgeStation(organization, judge.id, "Il voto era già stato inviato ed è rimasto bloccato.");
-      const result = saveScoreFromForm(event, organization, participant, judge, $("#judgeScoreForm"), () => renderJudgeStation(organization, judge.id, "Voto inviato correttamente alla regia."));
+      if (!review&&participantScores(event, participant).some(item => item.judgeId === judge.id)) return renderJudgeStation(organization, judge.id, "Il voto era già stato inviato ed è rimasto bloccato.");
+      const result = saveScoreFromForm(event, organization, participant, judge, $("#judgeScoreForm"), () => renderJudgeStation(organization, judge.id, "Voto inviato correttamente alla regia."), {review});
       if (!result?.ok) {
         const feedback = $("#judgeVoteFeedback");
         feedback.className = "feedback-banner error";
@@ -2635,7 +2701,7 @@
     return {
       context: form.dataset.scoreContext,
       judgeId: $("#scoreJudge", form)?.value,
-      fields: $$(".score-value, #scorePenalty, #scoreNote, #judgeOptionalNote", form).map(input => ({
+      fields: $$(".score-value, #scorePenalty, #scorePenaltyScope, #scoreNote, #judgeOptionalNote", form).map(input => ({
         criterionId: input.dataset.criterion || "",
         id: input.id,
         value: input.value
@@ -2649,7 +2715,7 @@
     const judgeSelect = $("#scoreJudge", form);
     if (judgeSelect && ![...judgeSelect.options].some(option => option.value === draft.judgeId)) return;
     if (judgeSelect) judgeSelect.value = draft.judgeId;
-    const fields = $$(".score-value, #scorePenalty, #scoreNote, #judgeOptionalNote", form);
+    const fields = $$(".score-value, #scorePenalty, #scorePenaltyScope, #scoreNote, #judgeOptionalNote", form);
     draft.fields.forEach(saved => {
       const input = fields.find(field => saved.criterionId ? field.dataset.criterion === saved.criterionId : field.id === saved.id);
       if (input) input.value = saved.value;
@@ -2693,7 +2759,7 @@
     const timedParticipants = event.control.timeScope === "category" ? event.participants.filter(item => item.categoryId === current.categoryId) : event.control.timeScope === "athlete" ? [current] : event.participants;
     const totalDuration = timedParticipants.reduce((sum, item) => sum + musicDurationFor(item), 0);
     const next = nextOrderedParticipant(event, current);
-    const overrideHistory = event.scoreHistory.filter(item => item.type === "manual-override" && item.participantId === current.id).slice().reverse();
+    const overrideHistory = event.scoreHistory.filter(item => ["manual-override","judge-revote"].includes(item.type) && item.participantId === current.id).slice().reverse();
     $("#moduleContent").innerHTML = `<div class="module-heading"><div><p class="eyebrow">Controllo gara · ${activeRound(event) === "final" ? event.rounds.finalLabel : event.rounds.qualificationLabel}</p><h2>Regia</h2><p>L’ordine è protetto: il concorrente successivo si sblocca soltanto quando tutti i giudici attivi hanno inviato il voto.</p></div><span class="count-chip">${event.participants.filter(item => item.status === "completed" && (item.round || "qualification") === activeRound(event)).length}/${event.participants.filter(item => (item.round || "qualification") === activeRound(event)).length} completati</span></div>
       ${operationalNotifications(event) ? `<div class="ops-notifications">${operationalNotifications(event)}</div>` : ""}
       <article class="dash-card control-settings"><div><strong>Avanzamento gara</strong><small>Automatico segue la scaletta; manuale abilita interventi e ripetizioni.</small></div><div class="segmented"><button data-control-mode="automatic" class="${event.control.mode === "automatic" ? "active" : ""}">Automatico</button><button data-control-mode="manual" class="${event.control.mode === "manual" ? "active" : ""}">Manuale</button></div></article>
@@ -2702,9 +2768,10 @@
         <article class="current-athlete"><p>${escapeHtml(current.discipline || "Disciplina")} · uscita ${current.order}</p><h2>${escapeHtml(current.name)}</h2><span>${escapeHtml(categoryName(event, current.categoryId))} · ${escapeHtml(current.club || "Nessuna società")} · tentativo ${current.attempt || 1} · ${musicDurationFor(current) ? formatDuration(musicDurationFor(current)) : "MP3 assente"}</span><div class="control-athlete-info"><div><small>Richieste attuali</small><strong>${escapeHtml(current.specialRequests || "Nessuna")}</strong></div><div><small>Prossimo · ${next ? (musicDurationFor(next) ? formatDuration(musicDurationFor(next)) : "MP3 assente") : "—"}</small><strong>${next ? `${escapeHtml(next.name)} — ${escapeHtml(next.specialRequests || "nessuna richiesta")}` : "Fine sessione"}</strong></div></div><div class="control-actions"><button class="button ghost status-button" data-status="ready">Chiama atleta</button><button class="button primary status-button" data-status="competing">Avvia esibizione</button><button class="button success status-button" data-status="completed" ${canConclude ? "" : "disabled"} title="${canConclude ? "Chiude l’esibizione" : "In attesa del voto di tutti i giudici attivi"}">Concludi e avanza</button><button class="button warning repeat-athlete" ${event.control.mode === "manual" ? "" : "disabled"} title="Disponibile in modalità manuale">Programma ripetizione</button><button class="button danger status-button" data-status="dns">Segna ritirato</button><button class="button ghost delete-current-athlete" ${current.status === "dns" && event.control.mode === "manual" ? "" : "disabled"} title="Disponibile solo per un atleta ritirato e in modalità manuale">Elimina definitivamente</button></div></article>
         <article class="dash-card vote-monitor"><div class="section-heading"><div><p class="eyebrow">Controllo votazione</p><h3>${progress.scores.length}/${progress.activeJudges.length} giudici hanno terminato</h3></div><button class="button ghost refresh-control">Aggiorna</button></div>${progress.complete ? '<div class="vote-complete">✓ Tutti i giudici hanno votato. È possibile avanzare.</div>' : `<div class="judge-alerts">${judgeWarnings(event, current) || '<div class="warning-box">Nessun giudice attivo configurato.</div>'}</div>`}<details class="rules-tip"><summary>Regolamento e indicazioni di gara</summary><p>${escapeHtml(event.rules.text || "Nessun regolamento inserito. Aggiungilo nella sezione Evento.")}</p></details></article>
         <article class="dash-card"><div class="section-heading"><div><p class="eyebrow">Emergenza regia</p><h3>Override voto manuale</h3><p class="muted">Usa questa funzione solo se la postazione di un giudice non è disponibile · ${currentScores.length}/${event.scoring.minimumJudges} voti minimi ricevuti</p></div></div>
-          ${activeJudges.length ? `<form id="scoreForm"><div class="operational-form score-form"><label>Giudice<select id="scoreJudge">${activeJudges.map(judge => `<option value="${judge.id}">${escapeHtml(judge.name)}</option>`).join("")}</select></label>${criteriaFields}${event.scoring.penalties.enabled ? '<label>Penalità<input id="scorePenalty" type="number" min="0" step="0.1" value="0"></label><label class="wide">Motivazione penalità<input id="scoreNote" placeholder="Obbligatoria se la penalità è maggiore di zero"></label>' : ""}<label class="wide">Motivazione override *<textarea id="overrideReason" rows="2" maxlength="1200" required placeholder="Descrivi il motivo della sostituzione del voto"></textarea></label></div><button class="button primary" type="submit">Salva voto</button></form>` : '<p class="warning-box">Configura almeno un giudice attivo prima di inserire i voti.</p>'}
+          ${activeJudges.length ? `<form id="scoreForm"><div class="operational-form score-form"><label>Giudice<select id="scoreJudge">${activeJudges.map(judge => `<option value="${judge.id}">${escapeHtml(judge.name)}</option>`).join("")}</select></label>${criteriaFields}${event.scoring.penalties.enabled ? juryPenaltyFields(null,uiLanguage()) : ""}<label class="wide">Motivazione override *<textarea id="overrideReason" rows="2" maxlength="1200" required placeholder="Descrivi il motivo della sostituzione del voto"></textarea></label></div><button class="button primary" type="submit">Salva voto</button></form>` : '<p class="warning-box">Configura almeno un giudice attivo prima di inserire i voti.</p>'}
           <div class="submitted-scores">${currentScores.map(score => { const judge = event.judges.find(item => item.id === score.judgeId); return `<div><span>${escapeHtml(judge?.name || "Giudice eliminato")}</span><strong>${judgeScore(event, score).toFixed(2)}</strong></div>`; }).join("")}</div><details class="score-audit"><summary>Storico modifiche voto (${overrideHistory.length})</summary>${overrideHistory.length ? overrideHistory.map(item => `<div class="score-audit-row"><strong>${escapeHtml(event.judges.find(judge => judge.id === item.judgeId)?.name || "Giudice")}</strong><span>${item.originalScore ? judgeScore(event, item.originalScore).toFixed(2) : "—"} → ${judgeScore(event, item.replacementScore).toFixed(2)}</span><small>${escapeHtml(item.reason)} · ${escapeHtml(item.actor?.email || item.actor?.role || "regia")} · ${new Date(item.createdAt).toLocaleString(localeForLanguage(uiLanguage()))}</small></div>`).join("") : '<p>Nessuna modifica registrata.</p>'}</details><div class="inline-message success">${escapeHtml(message)}</div></article>
       </section></div>`;
+    renderJuryControl(organization);
     $$('[data-control-mode]', $("#moduleContent")).forEach(button => button.addEventListener("click", () => { event.control.mode = button.dataset.controlMode; saveRuntime(organization); renderControl(organization, `Avanzamento ${button.dataset.controlMode === "automatic" ? "automatico" : "manuale"} attivato.`); }));
     $$('[data-time-scope]', $("#moduleContent")).forEach(button => button.addEventListener("click", () => { event.control.timeScope = button.dataset.timeScope; saveRuntime(organization); renderControl(organization); }));
     $$(".queue-item", $("#moduleContent")).forEach(button => button.addEventListener("click", () => { if (event.control.mode !== "manual" || (current.status === "competing" && !progress.complete)) return; event.control.currentParticipantId = button.dataset.participant; saveRuntime(organization); renderControl(organization); }));
@@ -2758,10 +2825,10 @@
     const scoreRows = scores.map(score => {
       const judge = event.judges.find(item => item.id === score.judgeId);
       const values = event.scoring.criteria.map(item => `<td>${Number(score.values?.[item.id] ?? 0).toFixed(Number(item.decimals || 0))}</td>`).join("");
-      return `<tr><td><strong>${escapeHtml(judge?.name || "Giudice non disponibile")}</strong></td>${values}<td>${Number(score.penalty || 0).toFixed(2)}${score.penaltyNote || score.note ? `<small>${escapeHtml(score.penaltyNote || score.note)}</small>` : ""}</td><td>${escapeHtml(score.judgeNote || "—")}</td><td><strong>${judgeScore(event, score).toFixed(2)}</strong></td></tr>`;
+      return `<tr><td><strong>${escapeHtml(judge?.name || "Giudice non disponibile")}</strong></td>${values}<td>${Number(score.penalty || 0).toFixed(2)}${score.penaltyScope==='final'?'<small>Penalità pesante sul totale finale</small>':''}${score.penaltyNote || score.note ? `<small>${escapeHtml(score.penaltyNote || score.note)}</small>` : ""}</td><td>${escapeHtml(score.judgeNote || "—")}</td><td><strong>${judgeScore(event, score).toFixed(2)}</strong></td></tr>`;
     }).join("");
     return `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Scheda ${escapeHtml(participant.name)}</title><style>
-      :root{--primary:${organization.brand.primaryColor || "#c1121f"};--ink:#121826;--muted:#667085;--line:#d9dee7}*{box-sizing:border-box}body{margin:0;background:#eef1f5;color:var(--ink);font:14px Inter,Arial,sans-serif}.sheet{width:min(1120px,calc(100% - 32px));margin:24px auto;background:#fff;border-radius:20px;padding:34px;box-shadow:0 20px 60px #1118271c}.report-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--primary);padding-bottom:22px}.report-head img{max-width:150px;max-height:74px;object-fit:contain}.kicker{color:var(--primary);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800}.report-head h1{font-size:32px;margin:6px 0}.report-head p{margin:3px 0;color:var(--muted)}.athlete{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin:24px 0}.athlete div{background:#f6f7f9;border-radius:12px;padding:14px}.athlete span,.athlete strong{display:block}.athlete span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.athlete strong{font-size:18px;margin-top:5px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid var(--line);padding:10px;text-align:center}th{background:#f2f4f7}th:first-child,td:first-child{text-align:left}th small,td small{display:block;color:var(--muted);font-weight:400;margin-top:3px}.total{margin-top:22px;border-radius:15px;background:var(--ink);color:#fff;padding:20px;display:flex;justify-content:space-between;align-items:center}.total span,.total strong{display:block}.total small{color:#cbd5e1}.total strong{font-size:34px}.note{color:var(--muted);margin-top:18px;font-size:11px}.print{display:block;margin:18px auto 0;border:0;border-radius:10px;padding:11px 17px;background:var(--primary);color:#fff;font-weight:800;cursor:pointer}@media print{body{background:#fff}.sheet{width:100%;margin:0;padding:12px;box-shadow:none}.print{display:none}@page{size:landscape;margin:10mm}}</style></head><body><main class="sheet"><header class="report-head"><div><span class="kicker">Scheda ufficiale atleta</span><h1>${escapeHtml(event.name)}</h1><p>${escapeHtml(organization.name)} · ${escapeHtml(event.location || "")}</p><p>${escapeHtml(event.startsAt || "")} — ${escapeHtml(event.endsAt || "")}</p></div>${logo ? `<img src="${escapeHtml(logo)}" alt="Logo">` : ""}</header><section class="athlete"><div><span>Atleta</span><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.club || "Atleta indipendente")}</small></div><div><span>Categoria</span><strong>${escapeHtml(categoryName(event, participant.categoryId))}</strong></div><div><span>Disciplina</span><strong>${escapeHtml(participant.discipline || "—")}</strong></div></section><table><thead><tr><th>Giudice</th>${criteriaHeaders}<th>Penalità</th><th>Note giudice</th><th>Totale giudice</th></tr></thead><tbody>${scoreRows || `<tr><td colspan="${event.scoring.criteria.length + 4}">Nessun voto disponibile</td></tr>`}</tbody></table><section class="total"><div><span>Metodo di calcolo</span><strong style="font-size:18px">${escapeHtml(aggregationLabel(event.scoring.aggregation))}</strong><small>${result.count} voti ricevuti · minimo richiesto ${event.scoring.minimumJudges}</small></div><div><span>Totale finale</span><strong>${result.total === null ? "—" : result.total.toFixed(2)}</strong></div></section><p class="note">Documento generato da ScoreFlow. I punteggi riportano i criteri, i pesi, le penalità e le note facoltative dei giudici.</p><button class="print" onclick="window.print()">Stampa / salva in PDF</button></main></body></html>`;
+      :root{--primary:${organization.brand.primaryColor || "#c1121f"};--ink:#121826;--muted:#667085;--line:#d9dee7}*{box-sizing:border-box}body{margin:0;background:#eef1f5;color:var(--ink);font:14px Inter,Arial,sans-serif}.sheet{width:min(1120px,calc(100% - 32px));margin:24px auto;background:#fff;border-radius:20px;padding:34px;box-shadow:0 20px 60px #1118271c}.report-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--primary);padding-bottom:22px}.report-head img{max-width:150px;max-height:74px;object-fit:contain}.kicker{color:var(--primary);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800}.report-head h1{font-size:32px;margin:6px 0}.report-head p{margin:3px 0;color:var(--muted)}.athlete{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin:24px 0}.athlete div{background:#f6f7f9;border-radius:12px;padding:14px}.athlete span,.athlete strong{display:block}.athlete span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.athlete strong{font-size:18px;margin-top:5px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid var(--line);padding:10px;text-align:center}th{background:#f2f4f7}th:first-child,td:first-child{text-align:left}th small,td small{display:block;color:var(--muted);font-weight:400;margin-top:3px}.total{margin-top:22px;border-radius:15px;background:var(--ink);color:#fff;padding:20px;display:flex;justify-content:space-between;align-items:center}.total span,.total strong{display:block}.total small{color:#cbd5e1}.total strong{font-size:34px}.note{color:var(--muted);margin-top:18px;font-size:11px}.print{display:block;margin:18px auto 0;border:0;border-radius:10px;padding:11px 17px;background:var(--primary);color:#fff;font-weight:800;cursor:pointer}@media print{body{background:#fff}.sheet{width:100%;margin:0;padding:12px;box-shadow:none}.print{display:none}@page{size:landscape;margin:10mm}}</style></head><body><main class="sheet"><header class="report-head"><div><span class="kicker">Scheda ufficiale atleta</span><h1>${escapeHtml(event.name)}</h1><p>${escapeHtml(organization.name)} · ${escapeHtml(event.location || "")}</p><p>${escapeHtml(event.startsAt || "")} — ${escapeHtml(event.endsAt || "")}</p></div>${logo ? `<img src="${escapeHtml(logo)}" alt="Logo">` : ""}</header><section class="athlete"><div><span>Atleta</span><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.club || "Atleta indipendente")}</small></div><div><span>Categoria</span><strong>${escapeHtml(categoryName(event, participant.categoryId))}</strong></div><div><span>Disciplina</span><strong>${escapeHtml(participant.discipline || "—")}</strong></div></section><table><thead><tr><th>Giudice</th>${criteriaHeaders}<th>Penalità</th><th>Note giudice</th><th>Totale giudice</th></tr></thead><tbody>${scoreRows || `<tr><td colspan="${event.scoring.criteria.length + 4}">Nessun voto disponibile</td></tr>`}</tbody></table><section class="total"><div><span>Metodo di calcolo</span><strong style="font-size:18px">${escapeHtml(aggregationLabel(event.scoring.aggregation))}</strong><small>${result.count} voti ricevuti · minimo richiesto ${event.scoring.minimumJudges}${result.finalPenalty?` · lordo ${result.grossTotal.toFixed(2)} · penalità pesante −${result.finalPenalty.toFixed(2)}`:""}</small></div><div><span>Totale finale</span><strong>${result.total === null ? "—" : result.total.toFixed(2)}</strong></div></section><p class="note">Documento generato da ScoreFlow. I punteggi riportano i criteri, i pesi, le penalità e le note facoltative dei giudici.</p><button class="print" onclick="window.print()">Stampa / salva in PDF</button></main></body></html>`;
   }
 
   function openAthleteReport(organization, participantId) {

@@ -1,0 +1,7 @@
+const Rules=require('./scripts/competition-rules');
+const judges=[1,2,3].map(i=>({id:'j'+i,name:'Giudice '+i,code:String(i).repeat(4),active:true,language:'it'}));
+const p=(id,name,status)=>({id,name,status,categoryId:'base',discipline:'Tessuti',round:'qualification',attempt:1,order:id==='p1'?1:2,attachments:{entryVideo:{cloudPath:'qa/entry/'+id+'.mp4'}}});
+const scores=['p1','p2'].flatMap(id=>judges.map(j=>({id:id+'-'+j.id,participantId:id,judgeId:j.id,round:'qualification',attempt:1,values:Object.fromEntries(Rules.criteria().map(c=>[c.id,8])),penalty:0,note:'',submittedAt:'2026-11-13T08:00:00Z',locked:true})));
+const org={id:'qa-org',name:'TEST Freestyle Academy',slug:'qa',language:'it',brand:{primaryColor:'#c1121f',accentColor:'#d4af37'},cloud:{tenantKey:'qa',accountManaged:true,revision:1,status:'online'},subscription:{status:'active'},events:[{id:'qa-event',name:'TEST giuria — dati fittizi',categories:[{id:'base',name:'Base'},{id:'advanced',name:'Avanzato'}],disciplines:['Tessuti'],scoring:{criteria:Rules.criteria(),aggregation:'average',minimumJudges:3,judgeCount:3,penalties:{enabled:true,noteRequired:true}},competitionRules:Rules.preset(),participants:[p('p1','Anna TEST','completed'),p('p2','Elena TEST','competing')],judges,scores,control:{currentParticipantId:'p2',status:'running',mode:'automatic',round:'qualification',repeatQueue:[]},rules:{text:'Regolamento TEST'},publicVoting:{enabled:false},rounds:{enabled:false}}]};
+
+module.exports=org;

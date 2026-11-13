@@ -30,7 +30,7 @@ const previous={events:[{...event,scores:[score]}]};const incoming=structuredClo
 // Exercise actual server role merge and athlete sanitization without a database.
 const server=fs.readFileSync('server.js','utf8');
 const stateFn=server.slice(server.indexOf('function stateAllowedForRole('),server.indexOf('\nconst accountTable'));
-const context={require,CompetitionRules:R,copyParticipantOperations:(a)=>a,accountFailure:(message,statusCode,error)=>Object.assign(new Error(message),{statusCode,error})};vm.createContext(context);vm.runInContext(stateFn,context);
+const context={require,JuryWorkflow:require('./scripts/jury-workflow'),CompetitionRules:R,copyParticipantOperations:(a)=>a,accountFailure:(message,statusCode,error)=>Object.assign(new Error(message),{statusCode,error})};vm.createContext(context);vm.runInContext(stateFn,context);
 const current={events:[{...event,scores:[],judges:[{id:'j1',active:true}],participants:[{id:'p1',status:'competing',attempt:1,round:'qualification'}],control:{currentParticipantId:'p1'},scoring:{...event.scoring,penalties:{enabled:true,noteRequired:true}}}]};
 const candidate={...score,id:'new',judgeId:'j1',participantId:'p1',round:'qualification',attempt:1,submittedAt:'2026-11-13T09:00:00Z',penalty:1,note:'valid'};
 const bad=structuredClone(current);bad.events[0].scores=[{...candidate,penalty:99}];assert.throws(()=>context.stateAllowedForRole(current,bad,'judge',{judgeId:'j1'}),/Penalità/);

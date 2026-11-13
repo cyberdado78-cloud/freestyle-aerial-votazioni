@@ -125,3 +125,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,t
 /* ScoreFlow 3.4: first-run language and regulation-led setup. */
 .first-setup-language{display:grid;grid-template-columns:minmax(220px,.45fr) minmax(280px,1fr);gap:18px;align-items:end;margin-top:12px}.first-setup-language p,.regulation-first-run>p,.setup-rules-card>p{margin:0;color:var(--muted);line-height:1.55}.first-setup-language select{min-height:48px;font-weight:800}.regulation-first-run,.setup-rules-card{border:1px solid rgba(var(--primary-rgb),.25);background:rgba(var(--primary-rgb),.035);border-radius:18px;padding:20px}.setup-rules-card h3{margin:0 0 8px}.setup-rules-card textarea,.regulation-first-run textarea{resize:vertical}@media(max-width:720px){.first-setup-language{grid-template-columns:1fr;align-items:stretch}}
 
+
+/* Jury requests, controlled review and final-result penalties */
+.jury-archive{display:flex;flex-wrap:wrap;align-items:end;gap:16px;margin-bottom:20px}.jury-archive label{flex:1;min-width:220px}.jury-control{margin-bottom:22px;border-left:5px solid var(--primary)}.jury-count{display:inline-grid;place-items:center;min-width:30px;min-height:30px;border-radius:50%;background:var(--primary);color:white}.jury-inbox{padding:18px 0;border-top:1px solid #e4e7ec}.jury-inbox h4{margin:0 0 8px}.jury-inbox label,.jury-request-card label{display:block;margin:12px 0}.jury-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}.jury-penalty{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.jury-penalty label:last-of-type,.jury-explanation{grid-column:1/-1}.jury-explanation{font-size:13px;color:var(--muted);line-height:1.5}.jury-request-card{margin-top:20px}@media(max-width:640px){.jury-penalty{grid-template-columns:1fr}.jury-actions button{width:100%;white-space:normal}.jury-archive{display:block}.jury-archive button{margin-top:12px;width:100%}}
+
+.operational-form>.jury-penalty{grid-column:1/-1}
+
+@media(max-width:480px){.topbar{padding-inline:10px;gap:6px}}

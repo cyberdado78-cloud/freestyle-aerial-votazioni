@@ -5,6 +5,7 @@ const html=fs.readFileSync('index.html','utf8');
 assert(html.indexOf('scripts/competition-rules.js')<html.indexOf('./app.js'));
 const dom=new JSDOM(html,{url:'https://example.invalid',runScripts:'outside-only'});
 const w=dom.window;w.scrollTo=()=>{};w.confirm=()=>true;
+w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
 w.eval(fs.readFileSync('scripts/competition-rules.js','utf8'));
 let app=fs.readFileSync('app.js','utf8').replace('  initializeApplication();','  window.testRules = {facRulesPanel, bindFacRules, renderResults, resultFromScores};');
 w.eval(app);

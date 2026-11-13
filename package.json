@@ -1,14 +1,15 @@
 {
   "name": "scoreflow",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "private": true,
   "description": "ScoreFlow competition scoring platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check scripts/i18n.js",
-    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs && node athlete-recovery-ui-regression.cjs && node multi-judge-regression.cjs server.js",
-    "license:create": "node scripts/create-license.js"
+    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs && node athlete-recovery-ui-regression.cjs && node multi-judge-regression.cjs server.js && node jury-ui-regression.cjs",
+    "license:create": "node scripts/create-license.js",
+    "test:browser": "node jury-ui-browser-test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.76.1",

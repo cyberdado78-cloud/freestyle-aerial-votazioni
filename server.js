@@ -1,3 +1,4 @@
+const JuryWorkflow = require('./scripts/jury-workflow');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -696,29 +697,36 @@ function stateAllowedForRole(currentState, incomingState, role, access = null) {
     const previous = Array.isArray(currentEvent.scores) ? currentEvent.scores : [];
     const scoreKey = item => `${item.participantId}:${item.judgeId}:${item.round || 'qualification'}:${Number(item.attempt || 1)}`;
     const ids = new Map(previous.map(item => [item.id, item])), keys = new Set(previous.map(scoreKey));
+    JuryWorkflow.receiveRequests(currentEvent,incomingEvent,access.judgeId);
+    const replacements=new Map();
     const additions = [];
     for (const item of Array.isArray(incomingEvent.scores) ? incomingEvent.scores : []) {
       if (ids.has(item.id)) {
         if (!require('node:util').isDeepStrictEqual(item, ids.get(item.id))) throw accountFailure('Un voto già registrato non può essere modificato.',409,'score-locked');
         continue;
       }
-      if (keys.has(scoreKey(item))) throw accountFailure('Il voto è già registrato.',409,'score-locked');
+      const original=previous.find(s=>scoreKey(s)===scoreKey(item));
+      const review=original&&JuryWorkflow.approval(currentEvent,item,original);
+      if (keys.has(scoreKey(item))&&!review) throw accountFailure('Il voto è già registrato o la ri-votazione non è autorizzata.',409,'score-locked');
       if (item.judgeId !== access.judgeId) throw accountFailure('Puoi inviare soltanto il tuo voto.',403,'judge-mismatch');
       const participant = currentEvent.participants?.find(p => p.id === item.participantId);
       const judge = currentEvent.judges?.find(j => j.id === access.judgeId && j.active);
-      if (!judge || !participant || participant.id !== currentEvent.control?.currentParticipantId || !['ready','competing'].includes(participant.status) || (item.round || 'qualification') !== (participant.round || currentEvent.control?.round || 'qualification') || Number(item.attempt || 1) !== Number(participant.attempt || 1)) throw accountFailure('La scheda di voto non è più attiva.',409,'score-context-changed');
+      if (!judge || !participant || (!review&&(participant.id !== currentEvent.control?.currentParticipantId || !['ready','competing'].includes(participant.status) || (item.round || 'qualification') !== (participant.round || currentEvent.control?.round || 'qualification') || Number(item.attempt || 1) !== Number(participant.attempt || 1)))) throw accountFailure('La scheda di voto non è più attiva.',409,'score-context-changed');
       const criteria = currentEvent.scoring?.criteria || [];
       if (!criteria.length || !item.values || criteria.some(c => typeof item.values[c.id] !== 'number' || !Number.isFinite(item.values[c.id]) || item.values[c.id] < Number(c.min) || item.values[c.id] > Number(c.max))) throw accountFailure('Valori di voto non validi.',400,'invalid-score');
       if (typeof item.id !== 'string' || !item.id || item.id.length > 100 || typeof item.submittedAt !== 'string' || !Number.isFinite(Date.parse(item.submittedAt)) || typeof item.penalty !== 'number' || !Number.isFinite(item.penalty) || item.penalty < 0 || (!currentEvent.scoring?.penalties?.enabled && item.penalty !== 0)) throw accountFailure('Scheda di voto non valida.',400,'invalid-score');
-      const allowed = ['id','participantId','judgeId','round','attempt','values','penalty','note','penaltyNote','judgeNote','submittedAt','locked'];
+      const allowed = ['id','participantId','judgeId','round','attempt','values','penalty','note','penaltyNote','judgeNote','submittedAt','locked','penaltyScope','reviewRequestId'];
       const clean = Object.fromEntries(allowed.filter(k => item[k] !== undefined).map(k => [k, item[k]]));
       clean.values = Object.fromEntries(criteria.map(c => [c.id,item.values[c.id]]));
       clean.locked = true;
       for (const key of ['note','penaltyNote','judgeNote']) if (clean[key] !== undefined && (typeof clean[key] !== 'string' || clean[key].length > 4000)) throw accountFailure('Nota non valida.',400,'invalid-score');
       if (clean.penalty > 0 && currentEvent.scoring?.penalties?.noteRequired && !String(clean.penaltyNote || clean.note || '').trim()) throw accountFailure('Motivazione della penalità obbligatoria.',400,'invalid-score');
+      const ruleErrors=CompetitionRules.scoreErrors(currentEvent,clean);if(ruleErrors.length)throw accountFailure(ruleErrors.join(' '),400,'invalid-score');
+      if(review){JuryWorkflow.consume(currentEvent,review,original,clean,{role:'judge',judgeId:access.judgeId,accessId:access.id});replacements.set(original.id,clean);}
       additions.push(clean); ids.set(clean.id, clean); keys.add(scoreKey(clean));
     }
-    currentEvent.scores = [...previous, ...additions];
+    currentEvent.scores = [...previous.filter(s=>!replacements.has(s.id)), ...additions];
+    for(const score of additions)JuryWorkflow.categoryRequest(currentEvent,score);
     const incomingJudges = new Map((incomingEvent.judges || []).map(item => [item.id, item]));
     currentEvent.judges = (currentEvent.judges || []).map(item => {
       const incoming = item.id === access.judgeId ? incomingJudges.get(item.id) : null;
@@ -751,6 +759,7 @@ function stateAllowedForRole(currentState, incomingState, role, access = null) {
     });
     currentEvent.scoreHistory = [...previousHistory, ...addedHistory];
     currentEvent.notifications = Array.isArray(incomingEvent.notifications) ? incomingEvent.notifications : currentEvent.notifications;
+    JuryWorkflow.receiveDecisions(currentEvent,incomingEvent,{role:'control',accessId:access?.id||'account-owner'});
   } else if (role === 'public') {
     const existing = Array.isArray(currentEvent.publicVotes) ? currentEvent.publicVotes : [];
     const incoming = Array.isArray(incomingEvent.publicVotes) ? incomingEvent.publicVotes : [];
@@ -769,6 +778,7 @@ function stateAllowedForRole(currentState, incomingState, role, access = null) {
     }
     currentEvent.publicVotes = [...existing, ...additions];
   }
+  JuryWorkflow.expireMissingSources(currentEvent);
   if (['judge', 'control'].includes(role) && currentEvent.competitionRules?.enabled) {
     const previous = new Map((currentState.events?.[0]?.scores || []).map(s => [s.id, JSON.stringify(s)]));
     for (const score of currentEvent.scores || []) {
@@ -933,14 +943,14 @@ async function handleApi(request, response, requestUrl) {
   if (await handleAccountApi(request,response,requestUrl)) return true;
   if (requestUrl.pathname === '/api/status' && request.method === 'GET') {
     if (!databaseConfigured) {
-      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.4.0' });
+      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.5.0' });
       return true;
     }
     try {
       const supabase = getSupabase();
       const { error } = await supabase.from(tenantTable).select('tenant_key').limit(1);
       if (error) throw databaseError(error);
-      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.4.0' });
+      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.5.0' });
     } catch (error) {
       console.error('Database status error', error);
       const details = error?.payload ? error : databaseError(error);
@@ -1452,7 +1462,7 @@ async function handleApi(request, response, requestUrl) {
       sendJson(response, 409, { error: 'revision-conflict', revision: Number(latest.revision), updatedAt: latest.updated_at, state: deviceStateForRole(stateFromRow(latest.state_json), auth.access.role) });
       return true;
     }
-    sendJson(response, 200, { tenantKey: accessRoute.tenantKey, role: auth.access.role, revision: expectedRevision + 1 });
+    sendJson(response, 200, { tenantKey: accessRoute.tenantKey, role: auth.access.role, revision: expectedRevision + 1, state:deviceStateForRole(restrictedState,auth.access.role) });
     return true;
   }
 
@@ -1516,6 +1526,7 @@ async function handleApi(request, response, requestUrl) {
       const errors=Regulations.validate({name:r.source,criteria:event.scoring?.criteria,criteriaMode:r.criteriaMode,aggregation:event.scoring?.aggregation,minimumJudges:event.scoring?.minimumJudges,penaltyMin:r.penaltyMin,penaltyMax:r.penaltyMax,disciplines:event.disciplines,categories:r.customCatalog,tieBreakIds:r.tieBreakIds});
       if(errors.length)throw accountFailure(errors.join(' '),400);
     }
+    for(const event of body.state.events||[]){for(const score of event.scores||[]) JuryWorkflow.categoryRequest(event,score);JuryWorkflow.expireMissingSources(event);}
     CompetitionRules.validateState(stateFromRow(row.state_json), body.state);
     const { data: updated, error: updateError } = await supabase
       .from(tenantTable)
@@ -1583,7 +1594,7 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 200, {
       status: 'ok',
       service: 'scoreflow',
-      version: '3.4.0',
+      version: '3.5.0',
       email: databaseConfigured && managedEmailReady(), emailMode: 'managed-or-custom'
     });
     return;

@@ -37,6 +37,7 @@ assert.throws(()=>Rules.validateState({events:[persisted]},{events:[invalidVote]
 assert(R.validate({...d,minimumJudges:0}).length);assert(R.validate({...d,tieBreakIds:['unknown']}).length);assert(R.validate({...d,categories:[{...d.categories[0],maxAge:2}]}).length);
 const html=fs.readFileSync('index.html','utf8');assert(html.indexOf('scripts/regulation-import.js')>=0);assert(html.indexOf('scripts/regulation-import.js')<html.indexOf('./app.js'));
 const dom=new JSDOM(html,{url:'https://example.invalid',runScripts:'outside-only'}),w=dom.window;w.scrollTo=()=>{};
+w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
 w.eval(fs.readFileSync('scripts/competition-rules.js','utf8'));w.eval(fs.readFileSync('scripts/regulation-import.js','utf8'));w.eval(fs.readFileSync('app.js','utf8').replace('  initializeApplication();','  window.regTest={renderRegulationAssistant};'));
 const uiEvent=structuredClone(event);uiEvent.rules.proposal=structuredClone(d);uiEvent.rules.proposal.findings.push({field:'criterion',quote:'<img src=x onerror=alert(1)>',line:1});
 w.regTest.renderRegulationAssistant({events:[uiEvent]});assert(w.document.querySelector('#regReview'));assert.equal(w.document.querySelectorAll('[data-reg-criterion]').length,2);assert.equal(w.document.querySelectorAll('.regulation-assistant img').length,0);assert(w.document.querySelector('#regReviewed').required);

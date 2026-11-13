@@ -6,6 +6,7 @@ w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.setInterval=()
 const requests=[];
 let currentSession={user:null},signupReply={message:'Controlla la tua email.'};
 w.fetch=async(url,options={})=>{requests.push({url,options});if(url.endsWith('/session'))return{ok:true,json:async()=>currentSession};if(url==='/api/tenants')return{ok:true,json:async()=>({tenantKey:'qa-trial',revision:1,accountManaged:true,entitlements:{plan:'trial',status:'trialing',trialDays:14,trialStartedAt:new Date().toISOString(),trialEndsAt:new Date(Date.now()+14*86400000).toISOString(),serverTime:new Date().toISOString(),emailUsed:0,emailLimit:10}})};return{ok:true,json:async()=>signupReply};};
+w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
 w.eval(source.replace('  initializeApplication();','  window.qa={initializeApplication,showAccountScreen,restoreOrganizerAccount,createGuidedDemo,showOnboarding,formData,organization:()=>platform.organizations[0],setUser:u=>organizerAccount=u,readOnly:trialReadOnly,uploadCloudFile,acceptEntitlements,render:(m,o)=>renderDashboardModule(m,o),setActive:o=>{platform.organizations=[o];editingOrganizationId=o.id;},pushCloudState};'));
 const $=q=>w.document.querySelector(q),flush=()=>new Promise(r=>setImmediate(r));
 const cases=[

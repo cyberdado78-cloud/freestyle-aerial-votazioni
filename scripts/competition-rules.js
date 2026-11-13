@@ -68,8 +68,11 @@
   }
   function scoreErrors(event, score) {
     if (event.rules?.reviewRequired) return ['Approva la configurazione ricavata dal regolamento prima di votare.'];
-    if (!event.competitionRules?.enabled) return [];
-    const errors=[];
+    const globalErrors=[];
+    if(score.penaltyScope!==undefined&&!['judge','final'].includes(score.penaltyScope))globalErrors.push('Tipo di penalità non valido.');
+    if(score.penaltyScope==='final'&&(!Number.isFinite(score.penalty)||score.penalty<=0||score.penalty>100000||!String(score.penaltyNote||score.note||'').trim()))globalErrors.push('Penalità pesante: inserisci punti positivi e motivazione.');
+    if (!event.competitionRules?.enabled) return globalErrors;
+    const errors=globalErrors;
     if(event.competitionRules.profile==='custom'){
       const version=event.rules?.versions?.find(v=>v.number===event.rules.activeVersion);
       const c=version?.configuration,r=event.competitionRules;
@@ -81,14 +84,14 @@
       if (raw===null || raw==='' || raw===undefined || !Number.isFinite(n) || n<c.min || n>c.max || Math.abs(n*scale-Math.round(n*scale))>1e-7) errors.push(`Voto non valido: ${c.name}`);
     }
     const p=Number(score.penalty || 0), r=event.competitionRules;
-    if (!Number.isFinite(p) || p<0 || (p>0 && (p<r.penaltyMin || p>r.penaltyMax))) errors.push(`Penalità: zero oppure ${r.penaltyMin}–${r.penaltyMax}.`);
+    if (!Number.isFinite(p) || p<0 || (p>0 && score.penaltyScope!=='final' && (p<r.penaltyMin || p>r.penaltyMax))) errors.push(`Penalità: zero oppure ${r.penaltyMin}–${r.penaltyMax}.`);
     if (p>0 && !(score.penaltyNote || score.note || '').trim()) errors.push('Motivazione della penalità obbligatoria.');
     return errors;
   }
   function judgeScore(event, score) {
     const sum=event.scoring.criteria.reduce((s,c)=>s+Number(score.values?.[c.id] || 0)*Number(c.weight || 1),0);
     const weight=event.scoring.criteria.reduce((s,c)=>s+Number(c.weight || 1),0) || 1;
-    return Math.max(0,(event.competitionRules?.enabled && event.competitionRules.criteriaMode==='sum' ? sum : sum/weight)-Number(score.penalty || 0));
+    return Math.max(0,(event.competitionRules?.enabled && event.competitionRules.criteriaMode==='sum' ? sum : sum/weight)-(score.penaltyScope==='final'?0:Number(score.penalty || 0)));
   }
   function compare(event,a,b) {
     if (a.result.total===null || b.result.total===null) return a.result.total===b.result.total ? 0 : a.result.total===null ? 1:-1;

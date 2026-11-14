@@ -302,6 +302,16 @@
   }
 
   function mergeCloudOrganization(local, remote) {
+    const localGeneration = local.events?.[0]?.resetGeneration || 0;
+    const remoteGeneration = remote.events?.[0]?.resetGeneration || 0;
+    if (localGeneration !== remoteGeneration) {
+      // Data from opposite sides of a reset must never be combined.
+      const useLocal = localGeneration > remoteGeneration && !isRoleDevice(local);
+      const clean = JSON.parse(JSON.stringify(useLocal ? local : remote));
+      clean.id = local.id;
+      clean.cloud = { ...local.cloud };
+      return clean;
+    }
     if (local.cloud?.role === "public") {
       const result = JSON.parse(JSON.stringify(remote));
       const votes = (local.events?.[0]?.publicVotes || []).map(vote => Object.fromEntries(["id","participantId","deviceId","value","createdAt"].filter(key => vote[key] !== undefined).map(key => [key,vote[key]])));
@@ -975,6 +985,7 @@
         disciplines: $("#disciplines").value.split(",").map(v => v.trim()).filter(Boolean),
         categories: getCategories(),
         assets: selectedEventFiles.map(({ file, ...asset }) => ({ ...asset, id: asset.id || uid("asset"), status: asset.cloudPath ? "stored-in-cloud" : asset.status || "pending-cloud-upload" })),
+        resetGeneration: existing?.events?.[0]?.resetGeneration || 0,
         competitionRules: existing?.events?.[0]?.competitionRules,
         scoring: {
           aggregation: $("#aggregation").value,
@@ -1316,9 +1327,13 @@
   }
 
   function resetPostTest(organization) {
+    organization = platform.organizations.find(item => item.id === organization.id) || organization;
     const event = ensureEventData(organization.events[0]);
     const confirmation = prompt("Il reset cancella voti, risultati, cronologia, ripetizioni e stati della prova. Configurazione, roster e giudici restano invariati. Scrivi RESET per continuare.");
-    if (confirmation !== "RESET") return;
+    if (confirmation === null) return;
+    if (confirmation.trim().toUpperCase() !== "RESET") return showToast("Reset annullato: digita RESET per confermare.");
+    event.resetGeneration = (event.resetGeneration || 0) + 1;
+    event.publicVoting.award = null;
     event.scores = []; event.publicVotes = []; event.scoreHistory = []; event.juryRequests = []; event.roundHistory = []; event.notifications = []; event.resultsValidated = {};
     event.presenter = { selectedParticipantId: null, notes: {} };
     event.participants.forEach((participant, index) => { participant.order = index + 1; participant.status = "registered"; participant.round = "qualification"; participant.attempt = 1; participant.updatedAt = new Date().toISOString(); });
@@ -2407,6 +2422,33 @@
     const t=juryCopy[language]||juryCopy.it;
     return `<div class="penalty-panel jury-penalty"><label>${t.scope}<select id="scorePenaltyScope"><option value="judge" ${score?.penaltyScope!=='final'?'selected':''}>${t.ordinary}</option><option value="final" ${score?.penaltyScope==='final'?'selected':''}>${t.heavy}</option></select></label><label>${t.penalty}<input id="scorePenalty" type="number" min="0" max="100000" step="0.1" value="${Number(score?.penalty)||0}"></label><label>${t.penaltyReason}<input id="scoreNote" maxlength="1200" value="${escapeHtml(score?.penaltyNote||score?.note||'')}"></label><p class="jury-explanation">${t.rule}</p></div>`;
   }
+  const outsideCategoryLabels = {it:'FUORI CATEGORIA', en:'OUT OF CATEGORY', fr:'HORS CATÉGORIE', es:'FUERA DE CATEGORÍA'};
+  function judgePenaltyFields(event, score, language) {
+    // A reopened historical final penalty retains its original meaning.
+    if (score?.penaltyScope === 'final') return juryPenaltyFields(score, language);
+    const t = juryCopy[language] || juryCopy.it;
+    return `<div class="penalty-panel jury-penalty">
+      <button type="button" class="button ghost" id="outsideCategory" data-fixed-points="${ScoreFlowRules.outsideCategoryPoints(event) ?? ''}" aria-pressed="false" aria-controls="scoreNote">${outsideCategoryLabels[language] || outsideCategoryLabels.it}</button>
+      <input type="hidden" id="scorePenaltyScope" value="${score?.penaltyScope === 'outside-category' ? 'outside-category' : 'judge'}">
+      <label>${t.penalty}<input id="scorePenalty" type="number" min="0" max="100000" step="0.1" value="${Number(score?.penalty)||0}"></label>
+      <label><span data-reason-label></span><textarea id="scoreNote" maxlength="1200" rows="2">${escapeHtml(score?.penaltyNote||score?.note||'')}</textarea></label>
+    </div>`;
+  }
+  function syncOutsideCategory(form, language) {
+    const button = form?.querySelector('#outsideCategory');
+    if (!button) return;
+    const active = form.querySelector('#scorePenaltyScope').value === 'outside-category';
+    button.setAttribute('aria-pressed', String(active));
+    button.classList.toggle('primary', active);
+    button.classList.toggle('ghost', !active);
+    form.querySelector('#scoreNote').required = active;
+    const points = form.querySelector('#scorePenalty');
+    points.min = active ? '0.1' : '0';
+    points.readOnly = active && button.dataset.fixedPoints !== '';
+    if (points.readOnly) points.value = button.dataset.fixedPoints;
+    const t = juryCopy[language] || juryCopy.it;
+    form.querySelector('[data-reason-label]').textContent = active ? t.penaltyReason : t.reason;
+  }
   function renderJuryJudgeTools(organization,judge,participant,score,approval,language){
     const event=ensureEventData(organization.events[0]),t=juryCopy[language]||juryCopy.it;
     const shell=$('.judge-shell');
@@ -2633,8 +2675,23 @@
       <article class="role-athlete judge-athlete-card"><div class="judge-athlete-photo">${participant.photoDataUrl ? `<img src="${participant.photoDataUrl}" alt="${escapeHtml(participant.name)}">` : `<span>${escapeHtml(participant.name.charAt(0) || "A")}</span>`}</div><div><p class="eyebrow">${t.athlete}</p><h2>${escapeHtml(participant.name)}</h2><span>${escapeHtml(participant.discipline || "Disciplina")} · ${escapeHtml(categoryName(event, participant.categoryId))}</span><p class="athlete-description">${escapeHtml(participant.description || "Descrizione atleta non presente.")}</p></div><span class="state-badge ${participant.status}">${locked ? t.waiting : participant.status === "competing" ? "Live" : "Ready"}</span></article>
       <div class="judge-info-grid"><article class="dash-card choreography-card"><span>Titolo</span><strong>${escapeHtml(participant.choreographyTitle || t.noTitle)}</strong><span>Tema</span><p>${escapeHtml(participant.choreographyTheme || t.noTheme)}</p>${entryVideo?.blobKey || entryVideo?.cloudPath ? `<button class="button ghost judge-entry-video">▶ ${t.video}</button>` : '<small>Video entry non caricato</small>'}</article><article class="dash-card judge-rules"><div class="section-heading"><div><h3>${t.rules}</h3><p class="muted">PDF e testo consultabile senza uscire dalla votazione.</p></div>${event.rules.file?.blobKey || event.rules.file?.cloudPath ? `<button class="button mini open-judge-rules">Apri regolamento</button>` : ""}</div><label>${t.search}<input id="judgeRulesSearch" type="search" placeholder="${t.search}..."></label><div id="judgeRulesResult" class="rules-search-result">${escapeHtml(rulesText)}</div></article></div>
       <article class="dash-card judge-score-card"><div class="section-heading"><div><h3>${t.scoring}</h3><p class="muted">${existingScore ? sentText : t.instruction}</p></div></div>
-      ${existingScore&&!review ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${sentTitle}</strong><p>${sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event,review?existingScore:null)}</div>${event.scoring.penalties.enabled ? juryPenaltyFields(review?existingScore:null,language) : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}">${escapeHtml(review?existingScore?.judgeNote||"":"")}</textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
+      ${existingScore&&!review ? `<div class="feedback-banner success permanent"><span>✓</span><div><strong>${sentTitle}</strong><p>${sentText}</p><small>${new Date(existingScore.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div></div>` : locked ? `<div class="waiting-panel"><span>⌛</span><strong>${t.waiting}</strong><p>La regia deve chiamare o avviare l’atleta.</p></div>` : `<form id="judgeScoreForm"><div class="judge-criteria-grid">${scoreFields(event,review?existingScore:null)}</div>${event.scoring.penalties.enabled ? judgePenaltyFields(event,review?existingScore:null,language) : ""}<label class="judge-optional-note">${t.optionalNote}<textarea id="judgeOptionalNote" rows="3" placeholder="${t.optionalPlaceholder}">${escapeHtml(review?existingScore?.judgeNote||"":"")}</textarea></label><button class="button primary score-submit" type="submit">${t.submit}</button></form>`}
       <div id="judgeVoteFeedback" class="feedback-banner ${message && !pendingScore ? "success" : "hidden"}"><span>✓</span><div><strong>${t.sent}</strong><p>${escapeHtml(message)}</p></div></div></article></div>`;
+    const judgeForm = $('#judgeScoreForm');
+    syncOutsideCategory(judgeForm, language);
+    $('#outsideCategory')?.addEventListener('click', () => {
+      const scope = $('#scorePenaltyScope', judgeForm);
+      const points = $('#scorePenalty', judgeForm);
+      if (scope.value === 'outside-category') {
+        scope.value = 'judge';
+        points.value = points.dataset.ordinaryValue || '0';
+      } else {
+        points.dataset.ordinaryValue = points.value;
+        scope.value = 'outside-category';
+      }
+      syncOutsideCategory(judgeForm, language);
+      if (scope.value === 'outside-category') $('#scoreNote', judgeForm).focus();
+    });
     renderJuryJudgeTools(organization,judge,participant,existingScore,review,language);
     $("#judgeScoreForm")?.setAttribute("data-score-context",JSON.stringify([organization.id,participant.id,participant.round,participant.attempt,judge.id,review?.id||null]));
     $(".station-back").addEventListener("click", () => activateDashboardModule("stations", organization));
@@ -2806,6 +2863,7 @@
       const input = fields.find(field => saved.criterionId ? field.dataset.criterion === saved.criterionId : field.id === saved.id);
       if (input) input.value = saved.value;
     });
+    syncOutsideCategory(form, $("#judgeUiLanguage")?.value);
   }
 
   function renderControlPreservingDraft(organization, message = "") {
@@ -2911,7 +2969,7 @@
     const scoreRows = scores.map(score => {
       const judge = event.judges.find(item => item.id === score.judgeId);
       const values = event.scoring.criteria.map(item => `<td>${Number(score.values?.[item.id] ?? 0).toFixed(Number(item.decimals || 0))}</td>`).join("");
-      return `<tr><td><strong>${escapeHtml(judge?.name || "Giudice non disponibile")}</strong></td>${values}<td>${Number(score.penalty || 0).toFixed(2)}${score.penaltyScope==='final'?'<small>Penalità pesante sul totale finale</small>':''}${score.penaltyNote || score.note ? `<small>${escapeHtml(score.penaltyNote || score.note)}</small>` : ""}</td><td>${escapeHtml(score.judgeNote || "—")}</td><td><strong>${judgeScore(event, score).toFixed(2)}</strong></td></tr>`;
+      return `<tr><td><strong>${escapeHtml(judge?.name || "Giudice non disponibile")}</strong></td>${values}<td>${Number(score.penalty || 0).toFixed(2)}${score.penaltyScope==='outside-category'?'<small>FUORI CATEGORIA</small>':score.penaltyScope==='final'?'<small>Penalità pesante sul totale finale</small>':''}${score.penaltyNote || score.note ? `<small>${escapeHtml(score.penaltyNote || score.note)}</small>` : ""}</td><td>${escapeHtml(score.judgeNote || "—")}</td><td><strong>${judgeScore(event, score).toFixed(2)}</strong></td></tr>`;
     }).join("");
     return `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Scheda ${escapeHtml(participant.name)}</title><style>
       :root{--primary:${organization.brand.primaryColor || "#c1121f"};--ink:#121826;--muted:#667085;--line:#d9dee7}*{box-sizing:border-box}body{margin:0;background:#eef1f5;color:var(--ink);font:14px Inter,Arial,sans-serif}.sheet{width:min(1120px,calc(100% - 32px));margin:24px auto;background:#fff;border-radius:20px;padding:34px;box-shadow:0 20px 60px #1118271c}.report-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--primary);padding-bottom:22px}.report-head img{max-width:150px;max-height:74px;object-fit:contain}.kicker{color:var(--primary);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800}.report-head h1{font-size:32px;margin:6px 0}.report-head p{margin:3px 0;color:var(--muted)}.athlete{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin:24px 0}.athlete div{background:#f6f7f9;border-radius:12px;padding:14px}.athlete span,.athlete strong{display:block}.athlete span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.athlete strong{font-size:18px;margin-top:5px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid var(--line);padding:10px;text-align:center}th{background:#f2f4f7}th:first-child,td:first-child{text-align:left}th small,td small{display:block;color:var(--muted);font-weight:400;margin-top:3px}.total{margin-top:22px;border-radius:15px;background:var(--ink);color:#fff;padding:20px;display:flex;justify-content:space-between;align-items:center}.total span,.total strong{display:block}.total small{color:#cbd5e1}.total strong{font-size:34px}.note{color:var(--muted);margin-top:18px;font-size:11px}.print{display:block;margin:18px auto 0;border:0;border-radius:10px;padding:11px 17px;background:var(--primary);color:#fff;font-weight:800;cursor:pointer}@media print{body{background:#fff}.sheet{width:100%;margin:0;padding:12px;box-shadow:none}.print{display:none}@page{size:landscape;margin:10mm}}</style></head><body><main class="sheet"><header class="report-head"><div><span class="kicker">Scheda ufficiale atleta</span><h1>${escapeHtml(event.name)}</h1><p>${escapeHtml(organization.name)} · ${escapeHtml(event.location || "")}</p><p>${escapeHtml(event.startsAt || "")} — ${escapeHtml(event.endsAt || "")}</p></div>${logo ? `<img src="${escapeHtml(logo)}" alt="Logo">` : ""}</header><section class="athlete"><div><span>Atleta</span><strong>${escapeHtml(participant.name)}</strong><small>${escapeHtml(participant.club || "Atleta indipendente")}</small></div><div><span>Categoria</span><strong>${escapeHtml(categoryName(event, participant.categoryId))}</strong></div><div><span>Disciplina</span><strong>${escapeHtml(participant.discipline || "—")}</strong></div></section><table><thead><tr><th>Giudice</th>${criteriaHeaders}<th>Penalità</th><th>Note giudice</th><th>Totale giudice</th></tr></thead><tbody>${scoreRows || `<tr><td colspan="${event.scoring.criteria.length + 4}">Nessun voto disponibile</td></tr>`}</tbody></table><section class="total"><div><span>Metodo di calcolo</span><strong style="font-size:18px">${escapeHtml(aggregationLabel(event.scoring.aggregation))}</strong><small>${result.count} voti ricevuti · minimo richiesto ${event.scoring.minimumJudges}${result.finalPenalty?` · lordo ${result.grossTotal.toFixed(2)} · penalità pesante −${result.finalPenalty.toFixed(2)}`:""}</small></div><div><span>Totale finale</span><strong>${result.total === null ? "—" : result.total.toFixed(2)}</strong></div></section><p class="note">Documento generato da ScoreFlow. I punteggi riportano i criteri, i pesi, le penalità e le note facoltative dei giudici.</p><button class="print" onclick="window.print()">Stampa / salva in PDF</button></main></body></html>`;

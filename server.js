@@ -650,7 +650,7 @@ function deviceStateForRole(state, role) {
   result.brand = pick(state.brand, ['primaryColor','accentColor','logoDataUrl','logoUrl']);
   result.cloud = { tenantKey: state.cloud?.tenantKey || state.slug };
   result.events = (state.events || []).map(event => {
-    const out = pick(event, ['id','name','location','startsAt','endsAt']);
+    const out = pick(event, ['id','name','location','startsAt','endsAt','resetGeneration']);
     out.categories = (event.categories || []).map(c => pick(c, ['id','name']));
     out.participants = (event.participants || []).map(p => pick(p, ['id','name','club','discipline','categoryId','order','status','round','attempt']));
     out.control = pick(event.control, ['currentParticipantId','status','round']);
@@ -694,6 +694,9 @@ function stateAllowedForRole(currentState, incomingState, role, access = null) {
   const currentEvent = result.events?.[0];
   const incomingEvent = incomingState?.events?.[0];
   if (!currentEvent || !incomingEvent) return result;
+  if ((currentEvent.resetGeneration || 0) !== (incomingEvent.resetGeneration || 0)) {
+    throw accountFailure('La prova è stata azzerata. Ricarica la postazione.', 409, 'event-reset');
+  }
   if (role === 'judge') {
     if (!access?.judgeId) throw accountFailure('Accedi nuovamente con il codice giudice.',428,'judge-auth-required');
     const previous = Array.isArray(currentEvent.scores) ? currentEvent.scores : [];
@@ -957,14 +960,14 @@ async function handleApi(request, response, requestUrl) {
   if (await handleAccountApi(request,response,requestUrl)) return true;
   if (requestUrl.pathname === '/api/status' && request.method === 'GET') {
     if (!databaseConfigured) {
-      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.6.0' });
+      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.6.1' });
       return true;
     }
     try {
       const supabase = getSupabase();
       const { error } = await supabase.from(tenantTable).select('tenant_key').limit(1);
       if (error) throw databaseError(error);
-      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.6.0' });
+      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.6.1' });
     } catch (error) {
       console.error('Database status error', error);
       const details = error?.payload ? error : databaseError(error);
@@ -1529,6 +1532,17 @@ async function handleApi(request, response, requestUrl) {
       sendJson(response, 400, { error: 'invalid-state' });
       return true;
     }
+    if (expectedRevision !== Number(row.revision)) {
+      sendJson(response, 409, {error:'revision-conflict', revision:Number(row.revision), state:stateFromRow(row.state_json)});
+      return true;
+    }
+    for (const event of body.state.events || []) {
+      const previous = stateFromRow(row.state_json).events?.find(item => item.id === event.id);
+      const generation = event.resetGeneration ?? 0;
+      if (!Number.isSafeInteger(generation) || generation < (previous?.resetGeneration || 0)) {
+        throw accountFailure('La prova è stata azzerata. Ricarica la postazione.', 409, 'event-reset');
+      }
+    }
     for(const event of body.state.events||[])if(event.competitionRules?.profile==='custom'){
       const r=event.competitionRules;
       const errors=Regulations.validate({name:r.source,criteria:event.scoring?.criteria,criteriaMode:r.criteriaMode,aggregation:event.scoring?.aggregation,minimumJudges:event.scoring?.minimumJudges,penaltyMin:r.penaltyMin,penaltyMax:r.penaltyMax,disciplines:event.disciplines,categories:r.customCatalog,tieBreakIds:r.tieBreakIds});
@@ -1603,7 +1617,7 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 200, {
       status: 'ok',
       service: 'scoreflow',
-      version: '3.6.0',
+      version: '3.6.1',
       email: databaseConfigured && managedEmailReady(), emailMode: 'managed-or-custom'
     });
     return;

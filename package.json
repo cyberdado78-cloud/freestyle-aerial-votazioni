@@ -1,6 +1,6 @@
 {
   "name": "scoreflow",
-  "version": "3.6.0",
+  "version": "3.6.1",
   "private": true,
   "description": "ScoreFlow competition scoring platform",
   "main": "server.js",

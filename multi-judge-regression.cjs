@@ -177,6 +177,14 @@ w.eval(fs.readFileSync('scripts/competition-rules.js','utf8'));
   response=await api('GET',endpoint,null,'',{'X-ScoreFlow-Access':publicToken});
   check('public response never includes jury requests, judge reviews or private video paths',()=>{assert.equal(response.status,200);const e=response.body.state.events[0];assert.equal(e.juryRequests,undefined);assert.deepEqual(e.scoreHistory,[]);assert(!JSON.stringify(e).includes(videoPath));});
 
+  const beforeReset=clone(current().state_json);
+  current().state_json.events[0].resetGeneration=1;current().state_json.events[0].scores=[];current().state_json.events[0].publicVotes=[];current().revision++;
+  check('frontend never merges old scores back after a reset',()=>{const merged=control.mergeCloudOrganization(beforeReset,current().state_json);assert.equal(merged.events[0].resetGeneration,1);assert.equal(merged.events[0].scores.length,0);});
+  response=await api('PUT',endpoint,{revision:current().revision,state:beforeReset},'',{'X-ScoreFlow-Access':tokens[0],'X-ScoreFlow-Judge-Ticket':clients[0].get().cloud.judgeTicket});
+  check('server rejects stale pre-reset station even with current revision',()=>{assert.equal(response.status,409);assert.equal(response.body.error,'event-reset');assert.equal(current().state_json.events[0].scores.length,0);});
+  response=await api('GET',endpoint,null,'',{'X-ScoreFlow-Access':publicToken});
+  check('public projection carries the reset generation without exposing old scores',()=>{assert.equal(response.body.state.events[0].resetGeneration,1);assert.equal(response.body.state.events[0].scores.length,0);});
+
   const summary={scope:'LOCAL ONLY: 3 independent JSDOM clients and real Node HTTP handlers; in-memory Supabase substitute; all data synthetic; no remote database accessed',checks,passed:checks.filter(x=>x.status==='PASS').length,failed:checks.filter(x=>x.status==='FAIL').length};
   if(process.env.SCOREFLOW_QA_REPORT)fs.writeFileSync(process.env.SCOREFLOW_QA_REPORT,JSON.stringify(summary,null,2));
   console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=1;

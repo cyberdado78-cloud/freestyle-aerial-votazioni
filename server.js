@@ -943,14 +943,14 @@ async function handleApi(request, response, requestUrl) {
   if (await handleAccountApi(request,response,requestUrl)) return true;
   if (requestUrl.pathname === '/api/status' && request.method === 'GET') {
     if (!databaseConfigured) {
-      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.5.0' });
+      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.5.1' });
       return true;
     }
     try {
       const supabase = getSupabase();
       const { error } = await supabase.from(tenantTable).select('tenant_key').limit(1);
       if (error) throw databaseError(error);
-      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.5.0' });
+      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.5.1' });
     } catch (error) {
       console.error('Database status error', error);
       const details = error?.payload ? error : databaseError(error);
@@ -1594,7 +1594,7 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 200, {
       status: 'ok',
       service: 'scoreflow',
-      version: '3.5.0',
+      version: '3.5.1',
       email: databaseConfigured && managedEmailReady(), emailMode: 'managed-or-custom'
     });
     return;

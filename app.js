@@ -59,6 +59,52 @@
   };
 
   let organizerAccount=null;
+  let entryIntent = sessionStorage.getItem('scoreflow.entryIntent') || 'trial';
+  let pendingLicense = sessionStorage.getItem('scoreflow.pendingLicense') || '';
+  function clearPendingLicense() {
+    pendingLicense = '';
+    sessionStorage.removeItem('scoreflow.pendingLicense');
+  }
+  function showStartScreen() {
+    hideOnboarding();
+    $('#accountScreen')?.classList.add('hidden');
+    $('#dashboard').classList.add('hidden');
+    $('main.layout').classList.add('hidden');
+    $('#organizerControls')?.classList.add('hidden');
+    $('#newConfigBtn').classList.add('hidden');
+    let screen = $('#startScreen');
+    if (!screen) { screen=document.createElement('section'); screen.id='startScreen'; screen.className='onboarding'; document.body.append(screen); }
+    screen.classList.remove('hidden');
+    screen.innerHTML=`<div class="onboarding-card start-card"><p class="eyebrow">Benvenuto in ScoreFlow</p><h1>Il tuo evento inizia qui</h1><p>Scegli come iniziare. Dopo l’accesso potrai configurare la tua organizzazione e caricare il regolamento della gara.</p><div class="start-options"><article><span class="onboarding-step">Hai già acquistato?</span><h2>Attiva la licenza</h2><p>Inserisci il codice ricevuto con l’acquisto. La durata è quella associata al codice; gli aggiornamenti sono inclusi durante la validità della licenza.</p><form id="startLicenseForm"><label for="startLicenseCode">Codice licenza</label><input id="startLicenseCode" autocomplete="off" placeholder="SF-XXXX-XXXX-XXXX" maxlength="128" required><button class="button primary" type="submit">Attiva licenza</button><small>Il codice sarà verificato sul tuo account. Se non hai ancora un account, potrai crearlo nel prossimo passaggio.</small></form></article><article><span class="onboarding-step">Scopri ScoreFlow</span><h2>Prova gratuita</h2><p>14 giorni per provare la gestione del tuo evento. Nessuna carta richiesta.</p><p class="muted">1 evento · 6 atleti · 3 giudici · 2 categorie · 10 invii email</p><button class="button primary" id="startTrial" type="button">Inizia la prova gratuita</button></article></div><p class="start-login">Hai già un account? <button class="button ghost" id="startLogin" type="button">Accedi</button></p></div>`;
+    $('#startLicenseForm').onsubmit=async event=>{
+      event.preventDefault();
+      pendingLicense=$('#startLicenseCode').value.trim().toUpperCase();
+      if(!pendingLicense) return;
+      entryIntent='license';
+      sessionStorage.setItem('scoreflow.entryIntent',entryIntent);
+      sessionStorage.setItem('scoreflow.pendingLicense',pendingLicense);
+      showAccountScreen('login');
+    };
+    $('#startTrial').onclick=()=>{
+      entryIntent='trial'; clearPendingLicense();
+      sessionStorage.setItem('scoreflow.entryIntent',entryIntent);
+      showAccountScreen('signup');
+    };
+    $('#startLogin').onclick=()=>{entryIntent='trial';sessionStorage.setItem('scoreflow.entryIntent',entryIntent);clearPendingLicense();showAccountScreen('login');};
+    window.ScoreFlowI18n?.translateDOM(screen);
+  }
+  function leaveStartScreen() {
+    $('#startScreen')?.classList.add('hidden');
+    $('#newConfigBtn').classList.remove('hidden');
+    $('#organizerControls')?.classList.remove('hidden');
+  }
+  async function applyPendingLicense(organization) {
+    if(!pendingLicense) return;
+    await activateLicense(organization,pendingLicense);
+    clearPendingLicense();
+    const refreshed=await accountApi('session');
+    if(refreshed.organization?.entitlements) acceptEntitlements(organization,refreshed.organization.entitlements);
+  }
   const trialCopy='14 giorni · 1 evento · 6 atleti complessivi · 3 giudici · 2 categorie · 10 tentativi d’invio email, prove incluse. Iscrizioni pubbliche e allegati necessari inclusi. Nessuna carta richiesta.';
   async function accountApi(action,body) {
     const response=await fetch(`/api/account/${action}`,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{})});
@@ -79,6 +125,7 @@
     return Boolean(e && (e.readOnly || (e.status!=='active' && Date.parse(e.trialEndsAt)<=Date.now()+(organization.cloud?.serverOffset || 0))));
   }
   function showAccountScreen(mode='login',token='') {
+    leaveStartScreen();
     hideOnboarding();
     $('#dashboard').classList.add('hidden');
     $('main.layout').classList.add('hidden');
@@ -86,7 +133,7 @@
     if(!screen) {screen=document.createElement('section');screen.id='accountScreen';screen.className='onboarding';document.body.append(screen);}
     screen.classList.remove('hidden');
     const signup=mode==='signup', recovery=mode==='recover', reset=mode==='reset', verify=mode==='verify';
-    screen.innerHTML=`<div class="onboarding-card account-card"><div class="account-language"><label class="language-picker"><span>Lingua</span><select data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label></div><p class="eyebrow">ScoreFlow · Account società</p><h1>${signup?'Prova ScoreFlow per 14 giorni':recovery?'Recupera la password':reset?'Scegli una nuova password':verify?'Conferma il tuo account':'Accedi alla tua società'}</h1><p>${escapeHtml(trialCopy)}</p><form id="accountForm">${reset||verify?'':`<label>Email della società<input id="accountEmail" type="email" autocomplete="email" maxlength="254" required></label>`}${recovery||verify?'':`<label>Password<span class="password-control"><input id="accountPassword" type="password" autocomplete="${signup||reset?'new-password':'current-password'}" minlength="${signup||reset?8:1}" maxlength="128" required><button id="accountPasswordToggle" class="password-visibility" type="button" aria-label="Mostra password" aria-controls="accountPassword" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="m3 3 18 18"/></svg></button></span>${signup||reset?'<small>Almeno 8 caratteri.</small>':''}</label>`}<button class="button primary" type="submit">${signup?'Crea account':recovery?'Invia collegamento':reset?'Salva nuova password':verify?'Conferma email':'Accedi'}</button><p id="accountMessage" role="status" aria-live="polite"></p></form><div class="onboarding-actions"><button class="button ghost" id="accountLogin" type="button">Accedi</button><button class="button ghost" id="accountSignup" type="button">Crea account e prova</button><button class="button ghost" id="accountRecover" type="button">Password dimenticata?</button></div></div>`;
+    screen.innerHTML=`<div class="onboarding-card account-card"><div class="account-language"><label class="language-picker"><span>Lingua</span><select data-scoreflow-language><option value="it">Italiano</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label></div><p class="eyebrow">ScoreFlow · Account società</p><h1>${signup?(entryIntent==='license'?'Crea il tuo account ScoreFlow':'Prova ScoreFlow per 14 giorni'):recovery?'Recupera la password':reset?'Scegli una nuova password':verify?'Conferma il tuo account':'Accedi alla tua società'}</h1><p>${escapeHtml(entryIntent==='license'?'Accedi o crea l’account della tua organizzazione per attivare il codice acquistato.':trialCopy)}</p><form id="accountForm">${reset||verify?'':`<label>Email della società<input id="accountEmail" type="email" autocomplete="email" maxlength="254" required></label>`}${recovery||verify?'':`<label>Password<span class="password-control"><input id="accountPassword" type="password" autocomplete="${signup||reset?'new-password':'current-password'}" minlength="${signup||reset?8:1}" maxlength="128" required><button id="accountPasswordToggle" class="password-visibility" type="button" aria-label="Mostra password" aria-controls="accountPassword" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="m3 3 18 18"/></svg></button></span>${signup||reset?'<small>Almeno 8 caratteri.</small>':''}</label>`}<button class="button primary" type="submit">${signup?'Crea account':recovery?'Invia collegamento':reset?'Salva nuova password':verify?'Conferma email':'Accedi'}</button><p id="accountMessage" role="status" aria-live="polite"></p></form><div class="onboarding-actions"><button class="button ghost" id="accountLogin" type="button">Accedi</button><button class="button ghost" id="accountSignup" type="button">${entryIntent==='license'?'Crea account':'Crea account e prova'}</button><button class="button ghost" id="accountStart" type="button">Torna alle due scelte</button><button class="button ghost" id="accountRecover" type="button">Password dimenticata?</button></div></div>`;
     window.ScoreFlowI18n?.translateDOM(screen);
     const passwordToggle=$('#accountPasswordToggle');
     if(passwordToggle) passwordToggle.onclick=()=>{
@@ -98,6 +145,7 @@
     $('#accountLogin').onclick=()=>showAccountScreen('login');
     $('#accountSignup').onclick=()=>showAccountScreen('signup');
     $('#accountRecover').onclick=()=>showAccountScreen('recover');
+    $('#accountStart').onclick=()=>showStartScreen();
     $('#accountForm').onsubmit=async event=>{
       event.preventDefault();
       const button=$('#accountForm button[type=submit]');button.disabled=true;
@@ -115,6 +163,7 @@
     const result=await accountApi('session');
     organizerAccount=result.user;
     if(!result.user) return false;
+    leaveStartScreen();
     $('#accountScreen')?.classList.add('hidden');
     if(result.organization) {
       const remote=result.organization;
@@ -122,6 +171,7 @@
       const org=pending ? mergeCloudOrganization(pending,remote.state) : remote.state;
       org.cloud={...(pending?.cloud || {}),tenantKey:remote.tenantKey,revision:remote.revision,status:pending?'connecting':'online',accountManaged:true};
       acceptEntitlements(org,remote.entitlements);
+      if(pendingLicense) {try {await applyPendingLicense(org);}catch(error){clearPendingLicense();showToast(error.message);}}
       const existing=platform.organizations.findIndex(x=>x.cloud?.tenantKey===remote.tenantKey);
       if(existing>=0) platform.organizations[existing]=org;else platform.organizations.push(org);
       platform.activeOrganizationId=org.id;persistPlatform();renderOrganizationList();loadOrganization(org.id,true);
@@ -155,14 +205,14 @@
   // Read-only mode guards event handlers too, including controls generated after navigation.
   document.addEventListener('submit',event=>{
     const org=platform.organizations.find(x=>x.id===editingOrganizationId);
-    if(trialReadOnly(org) && !event.target.matches('#licenseForm,#accountForm')) {event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: puoi consultare ed esportare i dati.');}
+    if(trialReadOnly(org) && !event.target.closest('#licenseForm,#accountScreen,#startScreen')) {event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: puoi consultare ed esportare i dati.');}
   },true);
   document.addEventListener('click',event=>{
     const org=platform.organizations.find(x=>x.id===editingOrganizationId);
     const button=event.target.closest('button');
     if(!button || !trialReadOnly(org) || !button.closest('#moduleContent')) return;
     const allowed=button.matches('[data-open-module],.station-back,.station-launch,.open-rules-file,[data-open-file],[data-athlete-open],#exportResultsBtn') || /^(Apri|Scarica|Esporta|Visualizza|Indietro)/i.test(button.textContent.trim());
-    if(!allowed && !button.closest('#licenseForm')){event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: i dati sono disponibili in sola lettura.');}
+    if(!allowed && !button.closest('#licenseForm,#accountScreen,#startScreen')){event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: i dati sono disponibili in sola lettura.');}
   },true);
 
   let platform = loadPlatform();
@@ -1567,6 +1617,15 @@
     let uploadWarning = "";
     try {
       if(!organization.cloud.revision) await registerCloudTenant(organization);
+      try { await applyPendingLicense(organization); }
+      catch(error) {
+        clearPendingLicense();
+        const index=platform.organizations.findIndex(item=>item.id===organization.id);
+        if(index>=0) platform.organizations[index]=organization; else platform.organizations.push(organization);
+        editingOrganizationId=organization.id; platform.activeOrganizationId=organization.id; persistPlatform();
+        hideOnboarding(); showDashboard(organization); showToast(error.message);
+        return;
+      }
     }catch(error){setMessage("saveMessage",error.message,true);return;}
     try {
       if (selectedLogoFile) {
@@ -1829,6 +1888,7 @@
   }
 
   function showOnboarding() {
+    leaveStartScreen();
     $("#accountScreen")?.classList.add("hidden");
     $("#firstSetupLanguage").value = uiLanguage();
     $$("[data-demo-size]").forEach(button=>{button.disabled=button.dataset.demoSize!=="compact";button.classList.toggle("active",button.dataset.demoSize==="compact");});
@@ -1837,6 +1897,7 @@
   }
 
   async function createGuidedDemo() {
+    if(entryIntent==='license') {startGuidedConfiguration();return;}
     if (!organizerAccount) {showAccountScreen("signup");return;}
     if (selectedRulesFile || $("#quickRulesText").value.trim()) {
       startGuidedConfiguration();
@@ -3180,6 +3241,8 @@
         await showRegistrationPortal(registrationTenant, recoveryToken);
         return;
       }
+      const entryParams=new URLSearchParams(window.location.search);
+      if(entryParams.has('inizia')) {showStartScreen();return;}
       const sharedOrganization = await joinSharedDevice();
       if (sharedOrganization) {
         $("#organizerControls").classList.add("hidden");
@@ -3195,7 +3258,7 @@
     platform.organizations=platform.organizations.filter(x=>!x.cloud?.accountManaged);
     const activeOrganization = platform.organizations.find(item => item.id === platform.activeOrganizationId) || platform.organizations[0];
     if (activeOrganization) loadOrganization(activeOrganization.id, true);
-    else showAccountScreen("signup");
+    else showStartScreen();
   }
 
   initializeApplication();

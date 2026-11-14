@@ -1,0 +1,20 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+const html=fs.readFileSync('index.html','utf8'),app=fs.readFileSync('app.js','utf8');
+const dom=new JSDOM(html,{url:'https://scoreflow.dynamiczen.it/?inizia=1',runScripts:'outside-only'}),w=dom.window;
+w.scrollTo=()=>{};w.setInterval=()=>0;w.setTimeout=()=>0;
+let apiCalls=0;
+w.fetch=async()=>{apiCalls++;throw Error('Unexpected network request')};
+w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
+w.eval(app.replace('  initializeApplication();','  window.entryQA={initializeApplication,showStartScreen};'));
+const $=q=>w.document.querySelector(q);
+(async()=>{
+ await w.entryQA.initializeApplication();assert.equal(apiCalls,0);assert.match($('#startScreen').textContent,/Attiva la licenza/);assert.match($('#startScreen').textContent,/Prova gratuita/);assert.equal($('#accountScreen'),null);
+ $('#startLicenseCode').value='sf-fake-test-only';await $('#startLicenseForm').onsubmit({preventDefault(){}});
+ assert.match($('#accountScreen h1').textContent,/Accedi/);assert.equal(w.sessionStorage.getItem('scoreflow.pendingLicense'),'SF-FAKE-TEST-ONLY');assert.equal(apiCalls,0);
+ $('#accountSignup').click();assert.match($('#accountScreen h1').textContent,/Crea il tuo account ScoreFlow/);assert.equal($('#accountSignup').textContent,'Crea account');assert.equal($('#accountPassword').minLength,8);
+ $('#accountStart').click();assert.equal($('#startScreen').classList.contains('hidden'),false);
+ $('#startTrial').click();assert.match($('#accountScreen h1').textContent,/14 giorni/);assert.equal(w.sessionStorage.getItem('scoreflow.pendingLicense'),null);
+ $('#accountStart').click();$('#startLogin').click();assert.equal($('#accountPassword').autocomplete,'current-password');assert.equal(apiCalls,0);
+ console.log('PASS customer entry: explicit start before session restoration, two choices, no network until account submission, license code retained, licensed signup wording, return, trial clears pending code, existing account login');
+})().catch(e=>{console.error(e);process.exitCode=1;});

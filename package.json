@@ -1,13 +1,13 @@
 {
   "name": "scoreflow",
-  "version": "3.5.1",
+  "version": "3.6.0",
   "private": true,
   "description": "ScoreFlow competition scoring platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check scripts/i18n.js",
-    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs && node athlete-recovery-ui-regression.cjs && node multi-judge-regression.cjs server.js && node jury-ui-regression.cjs && node customer-entry-regression.cjs",
+    "check": "node --check server.js && node --check app.js && node --check scripts/i18n.js && node --check scripts/license-service.js && node --check scripts/shop-licenses.js",
+    "test": "npm run check && node 3.2-regression.cjs && node health-regression.cjs server.js && node account-regression.cjs server.js && node account-ui-regression.cjs app.js index.html && node fac-regression.cjs && node fac-ui-regression.cjs && node regulation-regression.cjs && node first-run-regression.cjs && node athlete-recovery-ui-regression.cjs && node multi-judge-regression.cjs server.js && node jury-ui-regression.cjs && node customer-entry-regression.cjs && node commercial-account-ui-regression.cjs && node shop-license-regression.cjs",
     "license:create": "node scripts/create-license.js",
     "test:browser": "node jury-ui-browser-test.cjs"
   },

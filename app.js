@@ -59,6 +59,7 @@
   };
 
   let organizerAccount=null;
+  let organizerLicense=null;
   let entryIntent = sessionStorage.getItem('scoreflow.entryIntent') || 'trial';
   let pendingLicense = sessionStorage.getItem('scoreflow.pendingLicense') || '';
   function clearPendingLicense() {
@@ -67,6 +68,7 @@
   }
   function showStartScreen() {
     hideOnboarding();
+    $('#licenseActivation')?.classList.add('hidden');
     $('#accountScreen')?.classList.add('hidden');
     $('#dashboard').classList.add('hidden');
     $('main.layout').classList.add('hidden');
@@ -98,12 +100,19 @@
     $('#newConfigBtn').classList.remove('hidden');
     $('#organizerControls')?.classList.remove('hidden');
   }
-  async function applyPendingLicense(organization) {
-    if(!pendingLicense) return;
-    await activateLicense(organization,pendingLicense);
-    clearPendingLicense();
-    const refreshed=await accountApi('session');
-    if(refreshed.organization?.entitlements) acceptEntitlements(organization,refreshed.organization.entitlements);
+  function showLicenseActivation(message='') {
+    leaveStartScreen();hideOnboarding();$('#accountScreen')?.classList.add('hidden');
+    $('#dashboard').classList.add('hidden');$('main.layout').classList.add('hidden');
+    let screen=$('#licenseActivation');
+    if(!screen){screen=document.createElement('section');screen.id='licenseActivation';screen.className='onboarding';document.body.append(screen);}
+    screen.classList.remove('hidden');
+    screen.innerHTML=`<div class="onboarding-card account-card"><p class="eyebrow">ScoreFlow · Licenza</p><h1>Attiva la tua licenza</h1><p>Inserisci il codice acquistato per 3, 6 o 12 mesi. La validità parte dall’attivazione; un rinnovo conserva i giorni residui.</p><form id="accountLicenseForm"><label>Codice licenza<input id="accountLicenseCode" autocomplete="off" maxlength="128" required value="${escapeHtml(pendingLicense)}"></label><button class="button primary" type="submit">Verifica e attiva</button><p id="accountLicenseMessage" role="status">${escapeHtml(message)}</p></form><button class="button ghost" id="licenseBack" type="button">Torna alle due scelte</button></div>`;
+    $('#licenseBack').onclick=()=>{screen.classList.add('hidden');showStartScreen();};
+    $('#accountLicenseForm').onsubmit=async event=>{
+      event.preventDefault();const button=$('#accountLicenseForm button');button.disabled=true;
+      pendingLicense=$('#accountLicenseCode').value.trim().toUpperCase();sessionStorage.setItem('scoreflow.pendingLicense',pendingLicense);
+      try {await restoreOrganizerAccount();}catch(error){$('#accountLicenseMessage').textContent=error.message;}finally{button.disabled=false;}
+    };
   }
   const trialCopy='14 giorni · 1 evento · 6 atleti complessivi · 3 giudici · 2 categorie · 10 tentativi d’invio email, prove incluse. Iscrizioni pubbliche e allegati necessari inclusi. Nessuna carta richiesta.';
   async function accountApi(action,body) {
@@ -122,7 +131,7 @@
   }
   function trialReadOnly(organization) {
     const e=organization?.entitlements;
-    return Boolean(e && (e.readOnly || (e.status!=='active' && Date.parse(e.trialEndsAt)<=Date.now()+(organization.cloud?.serverOffset || 0))));
+    return Boolean(e && (e.readOnly || (e.licenseExpiresAt && Date.parse(e.licenseExpiresAt)<=Date.now()+(organization.cloud?.serverOffset || 0)) || (e.status!=='active' && Date.parse(e.trialEndsAt)<=Date.now()+(organization.cloud?.serverOffset || 0))));
   }
   function showAccountScreen(mode='login',token='') {
     leaveStartScreen();
@@ -151,7 +160,7 @@
       const button=$('#accountForm button[type=submit]');button.disabled=true;
       $('#accountMessage').textContent='Operazione in corso…';
       try {
-        const result=await accountApi(mode,{email:$('#accountEmail')?.value,password:$('#accountPassword')?.value,token,language:uiLanguage()});
+        const result=await accountApi(mode,{email:$('#accountEmail')?.value,password:$('#accountPassword')?.value,token,language:uiLanguage(),access:entryIntent});
         if(signup||recovery) {$('#accountMessage').textContent=result.message;return;}
         history.replaceState({},'',window.location.pathname);
         await restoreOrganizerAccount();
@@ -160,9 +169,17 @@
     };
   }
   async function restoreOrganizerAccount() {
-    const result=await accountApi('session');
+    let result=await accountApi('session');
     organizerAccount=result.user;
     if(!result.user) return false;
+    if(pendingLicense) {
+      try {await accountApi('license',{code:pendingLicense});clearPendingLicense();result=await accountApi('session');}
+      catch(error){showLicenseActivation(error.message);return true;}
+    }
+    const accountLicense=result.license || (result.organization?.entitlements?.status==='active'?result.organization.entitlements:null);
+    organizerLicense=accountLicense?.status==='active'?accountLicense:null;
+    if((entryIntent==='license' || !result.organization && accountLicense?.status==='expired') && !organizerLicense){showLicenseActivation();return true;}
+    $('#licenseActivation')?.classList.add('hidden');
     leaveStartScreen();
     $('#accountScreen')?.classList.add('hidden');
     if(result.organization) {
@@ -171,7 +188,6 @@
       const org=pending ? mergeCloudOrganization(pending,remote.state) : remote.state;
       org.cloud={...(pending?.cloud || {}),tenantKey:remote.tenantKey,revision:remote.revision,status:pending?'connecting':'online',accountManaged:true};
       acceptEntitlements(org,remote.entitlements);
-      if(pendingLicense) {try {await applyPendingLicense(org);}catch(error){clearPendingLicense();showToast(error.message);}}
       const existing=platform.organizations.findIndex(x=>x.cloud?.tenantKey===remote.tenantKey);
       if(existing>=0) platform.organizations[existing]=org;else platform.organizations.push(org);
       platform.activeOrganizationId=org.id;persistPlatform();renderOrganizationList();loadOrganization(org.id,true);
@@ -197,7 +213,7 @@
     };
     $('#accountLogout').onclick=async()=>{
       try {await accountApi('logout',{});}catch(error){showToast(error.message);return;}
-      clearInterval(cloudPollTimer);clearTimeout(cloudSyncTimer);organizerAccount=null;
+      clearInterval(cloudPollTimer);clearTimeout(cloudSyncTimer);organizerAccount=null;organizerLicense=null;clearPendingLicense();
       platform.organizations=platform.organizations.filter(x=>!x.cloud?.accountManaged);
       platform.activeOrganizationId=null;editingOrganizationId=null;persistPlatform();renderOrganizationList();showAccountScreen('login');
     };
@@ -205,14 +221,14 @@
   // Read-only mode guards event handlers too, including controls generated after navigation.
   document.addEventListener('submit',event=>{
     const org=platform.organizations.find(x=>x.id===editingOrganizationId);
-    if(trialReadOnly(org) && !event.target.closest('#licenseForm,#accountScreen,#startScreen')) {event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: puoi consultare ed esportare i dati.');}
+    if(trialReadOnly(org) && !event.target.closest('#licenseForm,#accountScreen,#startScreen,#licenseActivation')) {event.preventDefault();event.stopImmediatePropagation();showToast('Accesso scaduto: puoi consultare ed esportare i dati.');}
   },true);
   document.addEventListener('click',event=>{
     const org=platform.organizations.find(x=>x.id===editingOrganizationId);
     const button=event.target.closest('button');
     if(!button || !trialReadOnly(org) || !button.closest('#moduleContent')) return;
     const allowed=button.matches('[data-open-module],.station-back,.station-launch,.open-rules-file,[data-open-file],[data-athlete-open],#exportResultsBtn') || /^(Apri|Scarica|Esporta|Visualizza|Indietro)/i.test(button.textContent.trim());
-    if(!allowed && !button.closest('#licenseForm,#accountScreen,#startScreen')){event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: i dati sono disponibili in sola lettura.');}
+    if(!allowed && !button.closest('#licenseForm,#accountScreen,#startScreen,#licenseActivation')){event.preventDefault();event.stopImmediatePropagation();showToast('Prova terminata: i dati sono disponibili in sola lettura.');}
   },true);
 
   let platform = loadPlatform();
@@ -940,10 +956,10 @@
       name: $("#orgName").value.trim(),
       language: $("#language").value,
       brand: { primaryColor: $("#primaryColor").value, accentColor: $("#accentColor").value, logoUrl: $("#logoUrl").value.trim(), logoDataUrl, logoFile: existing?.brand?.logoFile || null },
-      entitlements: existing?.entitlements,
+      entitlements: existing?.entitlements || organizerLicense,
       subscription: {
-        plan: existing?.subscription?.plan || "trial",
-        status: existing?.subscription?.status || "trialing",
+        plan: existing?.subscription?.plan || organizerLicense?.plan || "trial",
+        status: existing?.subscription?.status || organizerLicense?.status || "trialing",
         trialDays,
         trialStartedAt: existing?.subscription?.trialStartedAt || now.toISOString(),
         trialEndsAt: existing?.subscription?.trialEndsAt || trialEnd.toISOString(),
@@ -1000,7 +1016,7 @@
     const event = org.events[0];
     const items = [
       ["Organizzazione", org.name, org.slug],
-      ["Prova gratuita", `${org.subscription.trialDays} giorni`, "Durata fissa verificata dal server"],
+      org.subscription.status==='active'?["Licenza", org.subscription.plan, "Validità verificata dal server"]:["Prova gratuita", `${org.subscription.trialDays} giorni`, "Durata fissa verificata dal server"],
       ["Evento", event.name, `${event.startsAt} → ${event.endsAt}`],
       ["Categorie", event.categories.length, event.disciplines.join(" · ")],
       ["Giuria", `${event.scoring.judgeCount} giudici`, `${event.scoring.minimumJudges} voti minimi`],
@@ -1320,6 +1336,9 @@
     organization.subscription.status = result.status;
     organization.subscription.licenseExpiresAt = result.expiresAt;
     organization.subscription.activatedAt = new Date().toISOString();
+    const refreshed=await accountApi('session');
+    if(refreshed.organization?.entitlements) acceptEntitlements(organization,refreshed.organization.entitlements);
+    organizerLicense=refreshed.license || organization.entitlements;
     saveRuntime(organization);
   }
 
@@ -1617,15 +1636,7 @@
     let uploadWarning = "";
     try {
       if(!organization.cloud.revision) await registerCloudTenant(organization);
-      try { await applyPendingLicense(organization); }
-      catch(error) {
-        clearPendingLicense();
-        const index=platform.organizations.findIndex(item=>item.id===organization.id);
-        if(index>=0) platform.organizations[index]=organization; else platform.organizations.push(organization);
-        editingOrganizationId=organization.id; platform.activeOrganizationId=organization.id; persistPlatform();
-        hideOnboarding(); showDashboard(organization); showToast(error.message);
-        return;
-      }
+
     }catch(error){setMessage("saveMessage",error.message,true);return;}
     try {
       if (selectedLogoFile) {
@@ -1829,7 +1840,7 @@
     logoDataUrl = defaultLogo(organizationName, profile.primary, profile.accent);
     $("#logoPreview").innerHTML = `<img src="${logoDataUrl}" alt="Logo predefinito generato">`;
     $("#categoryList").innerHTML = "";
-    profile.categories.slice(0,2).forEach(name => addCategory(name));
+    (organizerLicense?.status==='active'?profile.categories:profile.categories.slice(0,2)).forEach(name => addCategory(name));
     $("#criteriaRows").innerHTML = "";
     profile.criteria.forEach(name => addCriterionRow({ name, min: 0, max: 10, weight: 1, decimals: 1 }));
     $("#judgeCount").value = size.judges;
@@ -1890,6 +1901,14 @@
   function showOnboarding() {
     leaveStartScreen();
     $("#accountScreen")?.classList.add("hidden");
+    const paid=organizerLicense?.status==='active';
+    $('#createDemoBtn').classList.toggle('hidden',paid);
+    $('#demoSizeChoices').closest('.onboarding-block').classList.toggle('hidden',paid);
+    $('.trial-preview')?.classList.toggle('hidden',paid);
+    $('#trialDays').closest('label').classList.toggle('hidden',paid);
+    $('#quickOrgName').required=paid;$('#quickEventName').required=paid;
+    $('#quickOrgName').placeholder=paid?'Nome della tua organizzazione':'Lascia vuoto per un nome dimostrativo';
+    $('#quickEventName').placeholder=paid?'Nome della tua competizione':'Lascia vuoto per un evento dimostrativo';
     $("#firstSetupLanguage").value = uiLanguage();
     $$("[data-demo-size]").forEach(button=>{button.disabled=button.dataset.demoSize!=="compact";button.classList.toggle("active",button.dataset.demoSize==="compact");});
     closeDashboardNavigation();
@@ -1926,12 +1945,15 @@
 
   function startGuidedConfiguration() {
     if (!organizerAccount) {showAccountScreen("signup");return;}
+    if(organizerLicense?.status==='active' && (!$('#quickOrgName').value.trim() || !$('#quickEventName').value.trim())) {showToast('Inserisci il nome dell’organizzazione e della gara.');return;}
     onboardingSize="compact";
     applyOnboardingDefaults();
     hideOnboarding();
     showConfigurator();
-    $("#judgeCount").max="3";$("#minimumJudges").max="3";$("#publicVoting").disabled=false;$("#publicQr").disabled=!$("#publicVoting").checked;
-    $("#eventFiles").disabled=true;
+    const paid=organizerLicense?.status==='active';
+    if(paid){$('#judgeCount').removeAttribute('max');$('#minimumJudges').removeAttribute('max');}else{$('#judgeCount').max='3';$('#minimumJudges').max='3';}
+    $("#publicVoting").disabled=false;$("#publicQr").disabled=!$("#publicVoting").checked;
+    $("#eventFiles").disabled=!paid;
   }
 
   function updateTrialPreview() {
@@ -1974,13 +1996,16 @@
 
   function updateTrialBanner(organization) {
     if(!organization.entitlements)return;
-    $("#dashboardPlan").textContent=organization.subscription.status==="active" ? organization.subscription.plan : trialReadOnly(organization)?"Prova terminata · sola lettura":"Prova gratuita";
-    $("#dashboardTrial").textContent=organization.subscription.status==="active"?"Licenza attiva":trialReadOnly(organization)?"I dati restano consultabili ed esportabili":`${trialDaysRemaining(organization)} giorni rimasti · ${organization.entitlements.emailUsed}/10 invii email`;
+    $("#dashboardPlan").textContent=organization.subscription.status==="active" ? organization.subscription.plan : trialReadOnly(organization)?(organization.entitlements?.licenseExpiresAt?"Licenza scaduta · sola lettura":"Prova terminata · sola lettura"):"Prova gratuita";
+    $("#dashboardTrial").textContent=organization.subscription.status==="active"?(organization.subscription.licenseExpiresAt?'Licenza attiva fino al '+new Date(organization.subscription.licenseExpiresAt).toLocaleDateString(localeForLanguage(uiLanguage())):'Licenza attiva'):trialReadOnly(organization)?"I dati restano consultabili ed esportabili":`${trialDaysRemaining(organization)} giorni rimasti · ${organization.entitlements.emailUsed}/10 invii email`;
   }
 
   function showConfigurator() {
     closeDashboardNavigation();
     clearInterval(cloudPollTimer);
+    const paid=organizerLicense?.status==='active';
+    $('.trial-preview')?.classList.toggle('hidden',paid);
+    $('#trialDays').closest('label').classList.toggle('hidden',paid);
     $("#newConfigBtn").classList.remove("hidden");
     applyBrandTheme($("#primaryColor").value, $("#accentColor").value);
     $("#dashboard").classList.add("hidden");
@@ -3092,7 +3117,7 @@
         <button class="quick-action" data-open-module="judges"><strong>Configura giudici</strong><small>Ruoli, lingue e sostituzioni</small></button>
         <button class="quick-action" data-open-module="control"><strong>Entra in regia</strong><small>Scaletta, atleti in pedana e schede di voto</small></button>
         <button class="quick-action demo-action" data-complete-demo><strong>Completa dati demo</strong><small>Crea automaticamente i giudici mancanti e dati di prova</small></button>
-      </div></article></div><div class="dashboard-grid system-actions"><article class="dash-card"><p class="eyebrow">Licenza</p><h3>${organization.subscription.status === "active" ? "Software completo attivo" : "Sblocca ScoreFlow completo"}</h3><p class="muted">${organization.subscription.status === "active" ? `Piano ${escapeHtml(organization.subscription.plan)} attivo per questa organizzazione.` : `${trialDaysRemaining(organization)} giorni di prova rimasti. Inserisci il codice consegnato dopo l’acquisto.`}</p>${organization.subscription.status === "active" ? '<span class="state-badge completed">Licenza verificata</span>' : '<form id="licenseForm" class="license-form"><input id="licenseCode" autocomplete="off" placeholder="SF-XXXX-XXXX-XXXX"><button class="button primary" type="submit">Attiva licenza</button></form>'}</article><article class="dash-card danger-zone"><p class="eyebrow">Dopo una prova</p><h3>Reset post-test</h3><p class="muted">Azzera voti, risultati e flusso gara conservando configurazione, roster e giudici.</p><button class="button danger reset-post-test" type="button">Reset post-test</button></article></div>`;
+      </div></article></div><div class="dashboard-grid system-actions"><article class="dash-card"><p class="eyebrow">Licenza</p><h3>${organization.subscription.status === "active" ? "Software completo attivo" : "Sblocca ScoreFlow completo"}</h3><p class="muted">${organization.subscription.status === "active" ? `Piano ${escapeHtml(organization.subscription.plan)} attivo${organization.subscription.licenseExpiresAt ? ' fino al '+new Date(organization.subscription.licenseExpiresAt).toLocaleDateString(localeForLanguage(uiLanguage())) : ' senza scadenza'}. Aggiornamenti dell’app web inclusi.` : `${organization.entitlements?.licenseExpiresAt ? 'Licenza scaduta: inserisci un nuovo codice per rinnovare.' : `${trialDaysRemaining(organization)} giorni di prova rimasti. Inserisci il codice consegnato dopo l’acquisto.`}`}</p>${organization.subscription.status === "active" ? '<span class="state-badge completed">Licenza verificata</span>' : ''}${organization.subscription.plan === 'owner' ? '' : '<form id="licenseForm" class="license-form"><label for="licenseCode">Codice di attivazione o rinnovo</label><input id="licenseCode" autocomplete="off" maxlength="128" required placeholder="SF-XXXX-XXXX-XXXX"><button class="button primary" type="submit">Attiva o rinnova</button></form>'}</article><article class="dash-card danger-zone"><p class="eyebrow">Dopo una prova</p><h3>Reset post-test</h3><p class="muted">Azzera voti, risultati e flusso gara conservando configurazione, roster e giudici.</p><button class="button danger reset-post-test" type="button">Reset post-test</button></article></div>`;
       $$('[data-open-module]', content).forEach(button => button.addEventListener("click", () => activateDashboardModule(button.dataset.openModule, organization)));
       $("[data-complete-demo]", content).addEventListener("click", () => completeDemoData(organization));
       $(".reset-post-test", content).addEventListener("click", () => resetPostTest(organization));
@@ -3232,6 +3257,7 @@
     addAccountControls();
     try {
       const accountLink=new URLSearchParams(window.location.hash.slice(1));
+      if(accountLink.has('account') && accountLink.get('access')==='license'){entryIntent='license';sessionStorage.setItem('scoreflow.entryIntent',entryIntent);}
       if(accountLink.has("account")){const type=accountLink.get("account");const token=accountLink.get("token") || "";history.replaceState({},"",window.location.pathname);showAccountScreen(type==="recovery"?"reset":"verify",token);return;}
       const registrationTenant = String(new URLSearchParams(window.location.search).get("register") || "").trim().toLowerCase();
       if (registrationTenant) {

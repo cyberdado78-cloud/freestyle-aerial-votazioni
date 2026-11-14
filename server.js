@@ -1,4 +1,6 @@
 const JuryWorkflow = require('./scripts/jury-workflow');
+const Licenses = require('./scripts/license-service');
+const ShopLicenses = require('./scripts/shop-licenses');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -596,7 +598,7 @@ async function authenticatedTenant(request, response, tenantKey, options = {}) {
     const user = await organizerUser(request,response);
     if(!user || user.id !== owner.owner_id) { sendJson(response,401,{error:'account-required',message:'Accedi con l’account della società.'}); return null; }
     if(request.method !== 'GET' && !request.url.includes('/license/activate') && !request.url.includes('/files/sign')) await assertTrialWritable(supabaseAccount,tenantKey);
-    return {supabase:supabaseAccount,secret:'',accountManaged:true};
+    return {supabase:supabaseAccount,secret:'',accountManaged:true,ownerId:user.id};
   }
   const secret = requestSecret(request);
   const accessToken = requestAccessToken(request);
@@ -829,12 +831,15 @@ async function trialEntitlements(supabase, tenantKey) {
   const { data: account, error } = await supabase.from(accountTable).select('owner_id,trial_started_at,trial_ends_at,email_attempts').eq('tenant_key',tenantKey).maybeSingle();
   if (error) throw databaseError(error);
   if (!account) return null;
-  const { data: licenses, error: licenseError } = await supabase.from(licenseTable).select('plan,expires_at').eq('tenant_key',tenantKey).eq('active',true).limit(10);
+  const { data: licenses, error: licenseError } = await supabase.from(licenseTable).select('plan,expires_at,duration_months,activated_at,active').eq('tenant_key',tenantKey).limit(100);
   if (licenseError) throw databaseError(licenseError);
-  const license = (licenses || []).find(x=>!x.expires_at || Date.parse(x.expires_at)>Date.now());
-  const expired = !license && Date.parse(account.trial_ends_at)<=Date.now();
+  const ordered = (licenses || []).sort((a,b)=>(b.expires_at?Date.parse(b.expires_at):Infinity)-(a.expires_at?Date.parse(a.expires_at):Infinity));
+  const license = ordered.find(x=>x.active && (!x.expires_at || Date.parse(x.expires_at)>Date.now()));
+  const paidBefore=ordered.some(x=>x.activated_at && (x.duration_months || x.expires_at));
+  const expired = !license && (paidBefore || Date.parse(account.trial_ends_at)<=Date.now());
   return { plan: license?.plan || 'trial', status: license ? 'active' : expired ? 'expired' : 'trialing',
     trialDays:14, trialStartedAt:account.trial_started_at, trialEndsAt:account.trial_ends_at,
+    licenseExpiresAt:(license || ordered[0])?.expires_at || null,durationMonths:license?.duration_months || null,updatesIncluded:Boolean(license),
     readOnly:expired, emailUsed:account.email_attempts, emailLimit:license ? null : 10,
     limits:license ? null : {organizations:1,events:1,athletes:6,judges:3,categories:2}, serverTime:new Date().toISOString() };
 }
@@ -843,7 +848,7 @@ function accountFailure(message,statusCode=400,code='account-error') {
 }
 async function assertTrialWritable(supabase, tenantKey) {
   const entitlement = await trialEntitlements(supabase,tenantKey);
-  if (entitlement?.readOnly) throw accountFailure('La prova di 14 giorni è terminata. I dati restano consultabili ed esportabili.',403,'trial-expired');
+  if (entitlement?.readOnly) throw accountFailure(entitlement.licenseExpiresAt?'La licenza è scaduta. Rinnova per modificare i dati. I dati restano consultabili ed esportabili.':'La prova di 14 giorni è terminata. I dati restano consultabili ed esportabili.',403,'trial-expired');
   return entitlement;
 }
 function safeAccountMutation(request) {
@@ -862,7 +867,7 @@ function rateLimitAccount(request, email='', action='auth', increment=true) {
     if(increment ? ++entry.count>(key.startsWith('ip:')?60:6) : entry.count>=(key.startsWith('ip:')?60:6)) throw accountFailure('Troppi tentativi. Riprova tra 15 minuti.',429,'rate-limited');
   }
 }
-async function sendAccountLink(email,type,password,requestedLanguage='it') {
+async function sendAccountLink(email,type,password,requestedLanguage='it',access='trial') {
   if (!managedEmailReady()) throw accountFailure('Il servizio email non è disponibile. Riprova più tardi.',503);
   const client=accountClient();
   const {data,error}=await client.auth.admin.generateLink({type,email,...(password?{password}:{} )});
@@ -871,7 +876,7 @@ async function sendAccountLink(email,type,password,requestedLanguage='it') {
     if(type==='recovery' || error?.code==='email_exists') return;
     throw accountFailure('Non è stato possibile inviare il collegamento. Prova ad accedere o recuperare la password.',422);
   }
-  const link=`${appOrigin}/#account=${type}&token=${encodeURIComponent(data.properties.hashed_token)}`;
+  const link=`${appOrigin}/#account=${type}&token=${encodeURIComponent(data.properties.hashed_token)}${access==='license'?'&access=license':''}`;
   const recovery=type==='recovery';
   const language=normalizeLanguage(requestedLanguage);
   const copy={
@@ -880,6 +885,7 @@ async function sendAccountLink(email,type,password,requestedLanguage='it') {
     fr:{subjects:['ScoreFlow — récupérez votre mot de passe','ScoreFlow — confirmez votre compte'],texts:['Pour définir un nouveau mot de passe','Pour confirmer votre adresse e-mail et commencer l’essai de 14 jours'],ignore:'Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.'},
     es:{subjects:['ScoreFlow — recupera tu contraseña','ScoreFlow — confirma tu cuenta'],texts:['Para establecer una nueva contraseña','Para confirmar tu correo y comenzar la prueba de 14 días'],ignore:'Si no solicitaste esta acción, ignora este correo.'}
   }[language];
+  if(access==='license') copy.texts[1]=({it:'Per confermare il tuo indirizzo e attivare la licenza acquistata',en:'To confirm your email address and activate your purchased license',fr:'Pour confirmer votre adresse e-mail et activer votre licence achetée',es:'Para confirmar tu correo y activar tu licencia adquirida'})[language];
   const result=await deliverNotification(email,{id:crypto.randomUUID(),subject:copy.subjects[recovery?0:1],
     message:`${copy.texts[recovery?0:1]}:\n${link}\n\n${copy.ignore}`},
     {organizationName:'ScoreFlow',accountLink:link,recovery,language}, {apiKey:process.env.RESEND_API_KEY,from:process.env.SCOREFLOW_EMAIL_FROM,tenantKey:'account-auth'});
@@ -898,17 +904,25 @@ async function handleAccountApi(request,response,url) {
     let organization=null;
     if(owner){const row=await readTenant(supabase,owner.tenant_key);const entitlement=await trialEntitlements(supabase,owner.tenant_key);
       organization={tenantKey:owner.tenant_key,revision:Number(row.revision),state:stateFromRow(row.state_json),entitlements:entitlement};}
-    sendJson(response,200,{user:{email:user.email},organization});return true;
+    const license=organization?.entitlements?.status==='active'?organization.entitlements:await Licenses.forOwner(supabase,user.id);
+    sendJson(response,200,{user:{email:user.email},organization,license});return true;
   }
   if(request.method!=='POST'){sendJson(response,405,{error:'method-not-allowed'});return true;}
   safeAccountMutation(request);
   const body=await readJsonBody(request,16*1024);
+  if(action==='license') {
+    const user=await organizerUser(request,response);
+    if(!user?.email_confirmed_at) throw accountFailure('Accedi con un account email confermato.',401,'account-required');
+    rateLimitAccount(request,user.id,'license');
+    const result=await Licenses.redeem(getSupabase(),{code:body.code,ownerId:user.id});
+    sendJson(response,200,result);return true;
+  }
   const email=normalizeEmail(body.email),password=String(body.password || '');
   if(['signup','login','recover','verify','reset'].includes(action)) rateLimitAccount(request,email,action);
   if(['signup','login','recover'].includes(action) && !validEmailAddress(email)) throw accountFailure('Inserisci un indirizzo email valido.');
   if(['signup','reset'].includes(action) && (password.length<8 || password.length>128)) throw accountFailure('Scegli una password da 8 a 128 caratteri.');
   if(action==='signup' || action==='recover') {
-    await sendAccountLink(email,action==='signup'?'signup':'recovery',action==='signup'?password:undefined,body.language);
+    await sendAccountLink(email,action==='signup'?'signup':'recovery',action==='signup'?password:undefined,body.language,body.access==='license'?'license':'trial');
     sendJson(response,200,{message:action==='signup'?'Controlla la tua email per confermare l’account. Se hai già un account, accedi o recupera la password.':'Se l’indirizzo è registrato, riceverai il collegamento per recuperare la password.'});return true;
   }
   if(action==='login') {
@@ -943,14 +957,14 @@ async function handleApi(request, response, requestUrl) {
   if (await handleAccountApi(request,response,requestUrl)) return true;
   if (requestUrl.pathname === '/api/status' && request.method === 'GET') {
     if (!databaseConfigured) {
-      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.5.1' });
+      sendJson(response, 200, { status: 'setup-required', database: false, email: false, emailMode: 'managed-or-custom', service: 'scoreflow', version: '3.6.0' });
       return true;
     }
     try {
       const supabase = getSupabase();
       const { error } = await supabase.from(tenantTable).select('tenant_key').limit(1);
       if (error) throw databaseError(error);
-      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.5.1' });
+      sendJson(response, 200, { status: 'ok', database: true, email: managedEmailReady(), emailMode: 'managed-or-custom', emailProvider: 'resend', provider: 'supabase', service: 'scoreflow', version: '3.6.0' });
     } catch (error) {
       console.error('Database status error', error);
       const details = error?.payload ? error : databaseError(error);
@@ -1289,15 +1303,9 @@ async function handleApi(request, response, requestUrl) {
     const auth = await authenticatedTenant(request, response, adminRoute.tenantKey);
     if (!auth) return true;
     const body = await readJsonBody(request, 64 * 1024);
-    const codeHash = hashSecret(String(body.code || '').trim().toUpperCase());
-    const { data: license, error } = await auth.supabase.from(licenseTable).select('id,plan,expires_at,max_activations,activation_count,active,tenant_key').eq('code_hash', codeHash).maybeSingle();
-    if (error) throw databaseError(error);
-    if (!license || !license.active || (license.expires_at && Date.parse(license.expires_at) < Date.now()) || Number(license.activation_count) >= Number(license.max_activations) || (license.tenant_key && license.tenant_key !== adminRoute.tenantKey)) {
-      sendJson(response, 400, { error: 'invalid-license', message: 'Codice non valido, scaduto o già utilizzato.' }); return true;
-    }
-    const { error: updateError } = await auth.supabase.from(licenseTable).update({ tenant_key: adminRoute.tenantKey, activation_count: Number(license.activation_count) + 1, activated_at: new Date().toISOString() }).eq('id', license.id);
-    if (updateError) throw databaseError(updateError);
-    sendJson(response, 200, { plan: license.plan || 'professional', status: 'active', expiresAt: license.expires_at || null });
+    rateLimitAccount(request,adminRoute.tenantKey,'license');
+    const result=await Licenses.redeem(auth.supabase,{code:body.code,ownerId:auth.ownerId || null,tenantKey:adminRoute.tenantKey});
+    sendJson(response,200,result);
     return true;
   }
 
@@ -1556,6 +1564,7 @@ function resolvePublicFile(urlPath) {
   }
 
   if(decodedPath.split('/').includes('..')) return null;
+  if(decodedPath.startsWith('/scripts/') && !['/scripts/i18n.js','/scripts/jury-workflow.js','/scripts/competition-rules.js','/scripts/regulation-import.js'].includes(decodedPath)) return null;
   if (!['/', '/index.html', '/app.js', '/styles.css', '/display.html', '/esempio-partecipanti.csv', '/favicon.ico'].includes(decodedPath) && !/^\/(assets|scripts)\/[a-zA-Z0-9_./-]+$/.test(decodedPath)) return null;
   const relativePath = decodedPath === '/' ? 'index.html' : decodedPath.replace(/^\/+/, '');
   const requestedPath = path.resolve(publicRoot, relativePath);
@@ -1578,7 +1587,7 @@ const server = http.createServer(async (request, response) => {
     if (!response.headersSent) {
       if(String(error.message || '').includes('scoreflow:')) {
         const code=String(error.message).match(/scoreflow:([a-z-]+)/)?.[1] || 'trial-limit';
-        const messages={'trial-expired':'La prova è terminata. Puoi consultare ed esportare i dati.','limit-athletes':'La prova include al massimo 6 atleti complessivi tra roster e iscrizioni.','limit-categories':'La prova include al massimo 2 categorie.','limit-judges':'La prova include al massimo 3 giudici.','limit-events':'La prova include un solo evento.','event-immutable':'Mantieni lo stesso evento durante la prova.','feature-public-voting':'Il voto pubblico richiede una licenza completa.','organization-exists':'Questo account ha già una società. Accedi per riaprirla.'};
+        const messages={'license-expired':'La licenza è scaduta. Rinnova per modificare i dati.','trial-expired':'La prova è terminata. Puoi consultare ed esportare i dati.','limit-athletes':'La prova include al massimo 6 atleti complessivi tra roster e iscrizioni.','limit-categories':'La prova include al massimo 2 categorie.','limit-judges':'La prova include al massimo 3 giudici.','limit-events':'La prova include un solo evento.','event-immutable':'Mantieni lo stesso evento durante la prova.','feature-public-voting':'Il voto pubblico richiede una licenza completa.','organization-exists':'Questo account ha già una società. Accedi per riaprirla.'};
         sendJson(response,409,{error:code,message:messages[code] || 'Operazione oltre i limiti della prova.'});return;
       }
       sendJson(
@@ -1594,7 +1603,7 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 200, {
       status: 'ok',
       service: 'scoreflow',
-      version: '3.5.1',
+      version: '3.6.0',
       email: databaseConfigured && managedEmailReady(), emailMode: 'managed-or-custom'
     });
     return;
@@ -1645,5 +1654,11 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, '0.0.0.0', () => {
   console.log(`ScoreFlow disponibile sulla porta ${port}`);
   if (!databaseConfigured) console.log('Database ScoreFlow non configurato: modalità locale attiva.');
+  const shopConfig=ShopLicenses.configuration(process.env);
+  if(databaseConfigured && managedEmailReady() && shopConfig) {
+    const fulfillment=ShopLicenses.worker({supabase:getSupabase(),config:shopConfig,appOrigin,deliver:(email,notification,context)=>deliverNotification(email,notification,context,{apiKey:process.env.RESEND_API_KEY,from:process.env.SCOREFLOW_EMAIL_FROM,tenantKey:'license-delivery'})});
+    const run=()=>fulfillment.run().then(result=>{if(result.failed)console.error('ScoreFlow: alcune consegne licenza richiedono una verifica.');}).catch(()=>console.error('ScoreFlow: verifica ordini o consegna licenze non disponibile.'));
+    run();const timer=setInterval(run,60000);timer.unref();server.once('close',()=>clearInterval(timer));
+  }
 });
 

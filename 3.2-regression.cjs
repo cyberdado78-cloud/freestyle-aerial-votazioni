@@ -12,7 +12,7 @@ const migration = fs.readFileSync(path.join(root, 'migrations/20261023_trial_pub
 
 assert.match(html, /id="publicQr"/);
 assert.match(html, /data-scoreflow-language/g);
-assert.match(html, /scripts\/i18n\.js\?v=3\.5\.1/);
+assert.match(html, /scripts\/i18n\.js\?v=3\.6\.0/);
 assert.match(app, /preferredLanguage/);
 assert.match(app, /type: "manual-override"/);
 assert.match(app, /originalScoreId: original\.id/);

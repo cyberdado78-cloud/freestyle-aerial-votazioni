@@ -51,7 +51,14 @@ supabase.auth={
  signOut:async body=>{authCalls.push(['signOut',body]);return{error:null};},
  admin:{generateLink:async body=>{authCalls.push(['link',body]);return body.email==='missing@example.invalid'?{data:{},error:{}}:{data:{properties:{hashed_token:'a'.repeat(64)}},error:null};},signOut:async()=>({error:null})}
 };
-supabase.rpc=async(name,body)=>{authCalls.push(['rpc',name,body]);if(name==='scoreflow_claim_trial_email')return{data:++claims<=10,error:null};return{data:{tenantKey:body.p_tenant,revision:1},error:null};};
+supabase.rpc=async(name,body)=>{authCalls.push(['rpc',name,body]);
+if(name==='scoreflow_redeem_license'){
+ const rows=tables.get('scoreflow_license_codes')||[],row=rows.find(r=>r.code_hash===body.p_hash);
+ if(!row || row.owner_id && row.owner_id!==body.p_owner)return{data:null,error:{message:'scoreflow:invalid-license'}};
+ Object.assign(row,{owner_id:body.p_owner,activated_at:new Date().toISOString()});
+ return{data:{plan:row.plan,status:'active',expiresAt:row.expires_at,durationMonths:row.duration_months},error:null};
+}
+if(name==='scoreflow_claim_trial_email')return{data:++claims<=10,error:null};return{data:{tenantKey:body.p_tenant,revision:1},error:null};};
 const context={require:name=>name==='./db'?{databaseConfigured:true,getSupabase:()=>supabase}:require(name),__dirname:'/qa',Buffer,URL,Date,Set,AbortSignal,console:{log(){},error(){}},process:{env:{SCOREFLOW_APP_ORIGIN:'https://scoreflow.dynamiczen.it',SCOREFLOW_MANAGED_EMAIL_ENABLED:'true',RESEND_API_KEY:'re_MOCK_ONLY',SCOREFLOW_EMAIL_FROM:'ScoreFlow <sender@example.invalid>'}},fetch:async(url,options)=>{providerCalls.push({url,options});return{ok:true,status:200,json:async()=>({id:'provider-mock'})};}};
 vm.createContext(context);
 const source=fs.readFileSync(process.argv[2],'utf8').replace('const port = Number(process.env.PORT) || 3000;','const port = 0;');
@@ -64,6 +71,23 @@ async function api(method,path,body,cookie='',headers={}) {
 const cookie='sf_access=qa-access-token; sf_refresh=qa-refresh-token';
 const owner=()=>tables.get('scoreflow_organization_accounts')[0];
 const cases=[
+ ['license activation requires verified account and ignores caller-supplied ownership',async()=>{
+  const code='SF-QA-THREE-MONTHS';
+  tables.set('scoreflow_license_codes',[{code_hash:context.api.hashSecret(code),plan:'professional',duration_months:3,active:true,expires_at:new Date(Date.now()+90*86400000).toISOString()}]);
+  assert.equal((await api('POST','/api/account/license',{code})).status,401);
+  assert.equal((await api('POST','/api/account/license',{code},cookie,{Origin:'https://attacker.invalid'})).status,403);
+  const result=await api('POST','/api/account/license',{code,ownerId:'attacker'},cookie);
+  assert.equal(result.status,200);assert.equal(result.body.durationMonths,3);assert(!JSON.stringify(result).includes(code));
+  assert.equal(authCalls.filter(c=>c[1]==='scoreflow_redeem_license').at(-1)[2].p_owner,user.id);
+  const session=await api('GET','/api/account/session',null,cookie);assert.equal(session.body.organization,null);assert.equal(session.body.license.status,'active');
+  assert.equal((await api('POST','/api/account/license',{code:'SF-QA-INVALID'},cookie)).status,400);
+  tables.set('scoreflow_license_codes',[]);
+ }],
+ ['licensed account email preserves the activation route without including the license code',async()=>{
+  const before=providerCalls.length;await api('POST','/api/account/signup',{email:'licensed-buyer@example.invalid',password:'QA-password-123',access:'license'},'',{Origin:'https://scoreflow.dynamiczen.it'});
+  assert.equal(providerCalls.length,before+1);const sent=JSON.parse(providerCalls.at(-1).options.body);
+  assert.match(sent.text,/access=license/);assert.match(sent.text,/licenza acquistata/);assert(!sent.text.includes('14 giorni'));assert(!sent.text.includes('SF-QA-THREE-MONTHS'));
+ }],
  ['athlete recovery is generic and sends only a tenant-bound expiring link',async()=>{
    const a={id:'athlete-recovery-qa',tenant_key:'qa-owner',event_id:'event-qa',email:'athlete@example.invalid',password_hash:context.api.passwordHash('old-password'),profile_json:{firstName:'TEST',attachments:{photo:{name:'test.png'}}}};
    tables.set('scoreflow_athlete_accounts',[a]);const before=providerCalls.length;
@@ -133,7 +157,7 @@ const cases=[
  ['expired trial permits reads but blocks updates and test sends',async()=>{owner().trial_ends_at=new Date(Date.now()-10000).toISOString();assert.equal((await api('GET','/api/tenants/qa-owner/state',null,cookie)).status,200);assert.equal((await api('PUT','/api/tenants/qa-owner/state',{state:{},revision:1},cookie)).status,403);assert.equal((await api('POST','/api/tenants/qa-owner/email-settings/test',{to:'qa@example.invalid'},cookie)).status,403);}],
  ['expired owner can still request a signed download link',async()=>{objects.set('scoreflow-files/qa-owner/file.pdf',Buffer.from('qa'));const r=await api('POST','/api/tenants/qa-owner/files/sign',{path:'qa-owner/file.pdf'},cookie);assert.equal(r.status,200);}],
  ['trial quota caps concurrent delivery attempts before provider calls',async()=>{owner().trial_ends_at=new Date(Date.now()+86400000).toISOString();const before=providerCalls.length;const result=await Promise.all(Array.from({length:15},(_,i)=>context.api.deliverNotification('qa@example.invalid',{id:'quota-'+i,subject:'QA',message:'QA'},{},{trial:true,tenantKey:'qa-owner',apiKey:'re_MOCK_ONLY',from:'sender@example.invalid'})));assert.equal(result.filter(x=>x.deliveryStatus==='sent').length,10);assert.equal(providerCalls.length-before,10);}],
- ['server files and encoded traversal cannot be downloaded',async()=>{for(const path of ['/server.js','/db.js','/package.json','/trial-schema.sql','/assets/../server.js','/assets/%2e%2e/server.js'])assert.equal(context.api.resolvePublicFile(path),null);assert.ok(context.api.resolvePublicFile('/app.js'));}],
+ ['server files and encoded traversal cannot be downloaded',async()=>{for(const path of ['/server.js','/db.js','/scripts/license-service.js','/scripts/shop-licenses.js','/scripts/create-license.js','/scripts/extract-regulation.cjs','/package.json','/trial-schema.sql','/assets/../server.js','/assets/%2e%2e/server.js'])assert.equal(context.api.resolvePublicFile(path),null);assert.ok(context.api.resolvePublicFile('/app.js'));}],
  ['logout clears both session cookies',async()=>{const r=await api('POST','/api/account/logout',{},cookie);assert.equal(r.status,200);assert.ok(r.cookies.every(x=>x.includes('Max-Age=0')));}],
  ['repeated login attempts are rate limited',async()=>{for(let i=0;i<7;i++)await api('POST','/api/account/login',{email:'rate@example.invalid',password:'wrong'});assert.equal((await api('POST','/api/account/login',{email:'rate@example.invalid',password:'wrong'})).status,429);}]
 ];

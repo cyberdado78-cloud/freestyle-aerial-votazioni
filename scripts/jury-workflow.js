@@ -68,6 +68,6 @@
     for(const requested of incoming.juryRequests||[]){const r=event.juryRequests.find(r=>r.id===requested.id);if(r&&r.status!==requested.status&&['approved','rejected','kept','reclassified'].includes(requested.status))decide(event,r.id,requested.status,{reason:requested.decisionReason,categoryId:requested.categoryId,actor});}
   }
   function expireMissingSources(event){ensure(event);for(const r of event.juryRequests)if(['pending','approved'].includes(r.status)&&!event.scores?.some(s=>s.id===r.sourceScoreId)){r.status='superseded';r.updatedAt=stamp();}}
-  function finalPenalty(scores){return Math.max(0,...scores.filter(s=>s.penaltyScope==='final').map(s=>Number(s.penalty)||0));}
+  function finalPenalty(scores){return Math.max(0,...scores.filter(s=>['final','outside-category'].includes(s.penaltyScope)).map(s=>Number(s.penalty)||0));}
   return {key,ensure,expireMissingSources,approval,addRequest,receiveRequests,consume,categoryRequest,decide,receiveDecisions,finalPenalty};
 });

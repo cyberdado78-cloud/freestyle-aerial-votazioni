@@ -35,6 +35,39 @@ for(const mutate of [e=>e.rules.text+=' changed',e=>e.scoring.criteria[0].max=9,
 const invalidVote=structuredClone(secondVote);invalidVote.scores[1].values={'rule-0':11,'rule-1':7};
 assert.throws(()=>Rules.validateState({events:[persisted]},{events:[invalidVote]}),/Voto non valido/);
 assert(R.validate({...d,minimumJudges:0}).length);assert(R.validate({...d,tieBreakIds:['unknown']}).length);assert(R.validate({...d,categories:[{...d.categories[0],maxAge:2}]}).length);
+const pdfText = [
+  'Sabato 17 aprile 2027 – Gara di Cerchio Aereo',
+  'Domenica 18 aprile 2027 – Gara di Tessuti Aerei',
+  'Nella competizione saranno sommati i punteggi assegnati dai giudici',
+  'COREOGRAFIA …........................da 1.0 a 10.0 punti',
+  'TECNICA........................................da 1.0 a 10.0punti',
+  'PERFOMANCE GENERALE.........da 1.0 a 10.0 punti',
+  'In caso di pari merito verrà considerato il punteggio più alto dei seguenti criteri',
+  '1.Performance generale', '2. Tecnica', '3. Coreografia',
+  'Le schede saranno ritirate per eseguire il conteggio e la media.',
+  'CATEGORIA BASE', 'Questa è una linea guida, non una categoria autonoma.',
+  'CATEGORIA SENIOR (BASE, INTERMEDIO E AVANZATO)',
+  "L’iscrizione a questa categoria è ammessa agli atleti dall’età di 30 anni in poi.",
+  'Durata della performance BASE minimo 2:30 minuti fino ad un massimo di 4 minuti.',
+  'Durata della performance INTERMEDIO/AVANZATO minimo 3:00 minuti fino ad un massimo',
+  'di 5 minuti.',
+  'DUO PROFESSIONAL',
+  "L’iscrizione a questa categoria è ammessa ad artisti e performer.",
+  'Durata della performance minimo 3:30 minuti fino ad un massimo di 6 minuti.'
+].join('\n');
+const pdfEvent = {...event,rules:{proposal:{sourceText:pdfText,criteriaMode:'sum',aggregation:'average'}}};
+const pdfDraft = R.propose(pdfText,pdfEvent);
+assert.deepEqual(pdfDraft.disciplines,['Cerchio Aereo','Tessuti Aerei']);
+assert.deepEqual(pdfDraft.categories.map(c=>[c.name,c.minAge,c.minSeconds,c.maxSeconds]),[
+  ['Senior Base',30,150,240],['Senior Intermedio',30,180,300],
+  ['Senior Avanzato',30,180,300],['Duo Professional',null,210,360]
+]);
+assert.deepEqual(pdfDraft.tieBreakIds.map(id=>pdfDraft.criteria.find(c=>c.id===id).name),
+  ['Performance Generale','Tecnica','Coreografia']);
+assert.equal(pdfDraft.criteriaMode,'sum');
+assert.equal(pdfDraft.aggregation,'average');
+assert(pdfDraft.unresolved.includes('Indicazioni discordanti: aggregation'));
+assert.deepEqual(R.validate(pdfDraft),[]);
 const html=fs.readFileSync('index.html','utf8');assert(html.indexOf('scripts/regulation-import.js')>=0);assert(html.indexOf('scripts/regulation-import.js')<html.indexOf('./app.js'));
 const dom=new JSDOM(html,{url:'https://example.invalid',runScripts:'outside-only'}),w=dom.window;w.scrollTo=()=>{};
 w.eval(fs.readFileSync('scripts/jury-workflow.js','utf8'));
